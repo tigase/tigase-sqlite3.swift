@@ -40,10 +40,6 @@ public class DatabasePool {
         });
     }
     
-    deinit {
-        print("deinitializing database pool");
-    }
-
     public func reader(_ block: (DatabaseReader) throws -> Void) throws {
         try readers.execute(block);
     }
@@ -109,11 +105,7 @@ public class Pool<T> {
             items.append(Item(value: value));
         }
     }
-        
-    deinit {
-        print("deinitializing pool");
-    }
-    
+            
     public func execute<R>(_ block: (T) throws -> R) throws -> R {
         semaphore.wait();
         let item = try queue.sync { try self.acquire() };

@@ -48,14 +48,11 @@ public class Database: DatabaseWriter {
             throw DBError(resultCode: code) ?? DBError.internalError;
         }
         self.connection = openedHandle;
-        print("opened database connection:", connection);
     }
     
     deinit {
-        print("closing database connection:", connection);
         statementsCache.invalidate();
         let result = sqlite3_close_v2(connection);
-        print("closed database with result:", result, result == SQLITE_OK);
     }
     
     public func freeMemory() {

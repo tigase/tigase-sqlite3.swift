@@ -29,7 +29,6 @@ class DatabasePoolTest: XCTestCase {
     var databasePool: DatabasePool?;
     
     override func setUpWithError() throws {
-        print("initilizing");
         try databasePool = DatabasePool(configuration: Configuration(path: "file::memory:?cache=shared"));
         try databasePool?.writer({ database in
             try database.execute("create table t1(col1 id integer primary key asc, col2 text)");
@@ -39,12 +38,10 @@ class DatabasePoolTest: XCTestCase {
 
     override func tearDownWithError() throws {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
-        print("tearing down");
         try databasePool?.writer({ database in
             try database.execute("drop table t1");
         })
         databasePool = nil;
-        print("database pool:", databasePool)
     }
 
     func testSimple() throws {
@@ -132,6 +129,5 @@ class DatabasePoolTest: XCTestCase {
                 queues[i].waitUntilAllOperationsAreFinished();
             }
         }
-        print("database pool size:", databasePool?.currentPoolSize)
     }
 }
