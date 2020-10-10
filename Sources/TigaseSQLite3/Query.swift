@@ -1,5 +1,5 @@
 //
-// DBError.swift
+// Query.swift
 //
 // TigaseSQLite3.swift
 // Copyright (C) 2020 "Tigase, Inc." <office@tigase.com>
@@ -20,31 +20,13 @@
 //
 
 import Foundation
-import CSQLite
 
-public enum DBError: Error {
+public struct Query {
     
-    private static let successCodes = [ SQLITE_OK, SQLITE_ROW, SQLITE_DONE ];
-        
-    case sqliteError(errorCode: Int32, message: String?)
-    case invalidParameterName(name: String)
-    case unsupportedType(name: String)
-    case internalError
-    case invalidResult
-        
-    init?(resultCode: Int32) {
-        guard !DBError.successCodes.contains(resultCode) else {
-            return nil;
-        }
-
-        self = .sqliteError(errorCode: resultCode, message: nil);
+    public let statement: String;
+    
+    public init(_ value: String) {
+        self.statement = value;
     }
     
-    public init?(database: Database, resultCode: Int32) {
-        guard !DBError.successCodes.contains(resultCode) else {
-            return nil;
-        }
-
-        self = .sqliteError(errorCode: resultCode, message: database.errorMessage);
-    }
 }

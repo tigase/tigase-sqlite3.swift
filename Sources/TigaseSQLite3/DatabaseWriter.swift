@@ -23,6 +23,14 @@ import Foundation
 
 public protocol DatabaseWriter: DatabaseReader {
     
+    var changes: Int { get }
+    
+    var lastInsertedRowId: Int? { get }
+
+    func delete(_ query: String, cached: Bool, params: [String: Any?]) throws;
+
+    func delete(_ query: String, cached: Bool, params: [Any?]) throws;
+
     func insert(_ query: String, cached: Bool, params: [String: Any?]) throws;
 
     func insert(_ query: String, cached: Bool, params: [Any?]) throws;
@@ -34,10 +42,20 @@ public protocol DatabaseWriter: DatabaseReader {
     func execute(_ query: String, params: [String: Any?]) throws;
 
     func execute(_ query: String, params: [Any?]) throws;
+    
+    func withTransaction(_ block: (DatabaseWriter) throws -> Void) throws;
 }
 
 extension DatabaseWriter {
     
+    public func delete(_ query: String, cached: Bool = true, params: [String: Any?]) throws {
+        try delete(query, cached: cached, params: params);
+    }
+
+    public func delete(_ query: String, cached: Bool = true, params: [Any?] = []) throws {
+        try delete(query, cached: cached, params: params);
+    }
+
     public func insert(_ query: String, cached: Bool = true, params: [String: Any?]) throws {
         try insert(query, cached: cached, params: params);
     }

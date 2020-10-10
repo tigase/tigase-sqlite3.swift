@@ -35,7 +35,11 @@ public class DatabasePool {
     
     public init(configuration: Configuration) throws {
         self.configuration = configuration;
-        writer = try DatabasePool.openDatabaseWriter(configuration: configuration);
+        let writer = try DatabasePool.openDatabaseWriter(configuration: configuration);
+        if let migrator = configuration.schemaMigrator {
+            try DatabaseSchemaManager().upgrade(database: writer, migrator: migrator);
+        }
+        self.writer = writer;
         readers = try Pool(initialSize: configuration.initialPoolSize, maxSize: configuration.maximalPoolSize, supplier: { try DatabasePool.openDatabaseReader(configuration: configuration)
         });
     }

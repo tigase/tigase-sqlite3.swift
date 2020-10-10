@@ -22,11 +22,11 @@
 import Foundation
 
 extension Cursor {
-    public func double(at column: Int) -> Double {
+    public func double(at column: Int) -> Double? {
         return self[column];
     }
     
-    public func int(at column: Int) -> Int {
+    public func int(at column: Int) -> Int? {
         return self[column];
     }
     
@@ -50,11 +50,11 @@ extension Cursor {
 
 extension Cursor {
             
-    public func int(for column: String) -> Int {
+    public func int(for column: String) -> Int? {
         return self[column];
     }
 
-    public func double(for column: String) -> Double {
+    public func double(for column: String) -> Double? {
         return self[column];
     }
 

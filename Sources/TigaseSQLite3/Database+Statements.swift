@@ -41,7 +41,17 @@ extension Database {
         let statement = try self.statement(query, cached: cached);
         return try statement.query(params);
     }
+
+    public func delete(_ query: String, cached: Bool, params: [Any?]) throws {
+        let statement = try self.statement(query, cached: cached);
+        try statement.execute(params)
+    }
     
+    public func delete(_ query: String, cached: Bool, params: [String : Any?]) throws {
+        let statement = try self.statement(query, cached: cached);
+        try statement.execute(params)
+    }
+
     public func execute(_ query: String, params: [Any?]) throws {
         let statement = try self.statement(query, cached: false);
         try statement.execute(params)

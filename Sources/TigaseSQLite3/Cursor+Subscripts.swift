@@ -24,15 +24,24 @@ import CSQLite
 
 extension Cursor {
     
-    public subscript(index: Int) -> Double {
+    public subscript(index: Int) -> Double? {
+        if sqlite3_column_type(statement.statement, Int32(index)) == SQLITE_NULL {
+            return nil;
+        }
         return sqlite3_column_double(statement.statement, Int32(index));
     }
     
-    public subscript(index: Int) -> Int {
+    public subscript(index: Int) -> Int? {
+        if sqlite3_column_type(statement.statement, Int32(index)) == SQLITE_NULL {
+            return nil;
+        }
         return Int(sqlite3_column_int64(statement.statement, Int32(index)));
     }
     
-    public subscript(index: Int) -> Int32 {
+    public subscript(index: Int) -> Int32? {
+        if sqlite3_column_type(statement.statement, Int32(index)) == SQLITE_NULL {
+            return nil;
+        }
         return sqlite3_column_int(statement.statement, Int32(index));
     }
     
@@ -70,27 +79,37 @@ extension Cursor {
     }
     
     public subscript(index: Int) -> Date? {
-        let value = sqlite3_column_int64(statement.statement, Int32(index));
-        guard value != 0 else {
+        if sqlite3_column_type(statement.statement, Int32(index)) == SQLITE_NULL {
             return nil;
         }
+        let value = sqlite3_column_int64(statement.statement, Int32(index));
         let timestamp = Double(value) / 1000;
         return Date(timeIntervalSince1970: timestamp);
     }
 
-    public subscript(column: String) -> Double {
+    public subscript(column: String) -> Double? {
         return forColumn(column) {
+            if sqlite3_column_type(statement.statement, Int32($0)) == SQLITE_NULL {
+                return nil;
+            }
             return self[$0];
-        } ?? 0.0;
+        };
     }
     
-    public subscript(column: String) -> Int {
+    public subscript(column: String) -> Int? {
         if let idx = columnNames.firstIndex(of: column) {
             return self[idx];
         }
-        return 0;
+        return nil;
     }
-    
+
+    public subscript(column: String) -> Int32? {
+        if let idx = columnNames.firstIndex(of: column) {
+            return self[idx];
+        }
+        return nil;
+    }
+
     public subscript(column: String) -> String? {
         return forColumn(column) {
             return self[$0];

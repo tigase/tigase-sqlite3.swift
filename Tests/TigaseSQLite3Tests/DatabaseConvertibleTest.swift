@@ -31,13 +31,13 @@ class DatabaseConvertibleTest: XCTestCase {
     
     override func setUpWithError() throws {
         try database = Database(path: ":memory:");
-        try database?.execute(query: "create table t1(col1 id integer primary key asc, col2 text)");
+        try database?.execute("create table t1(col1 id integer primary key asc, col2 text)");
         // Put setup code here. This method is called before the invocation of each test method in the class.
     }
 
     override func tearDownWithError() throws {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
-        try database?.execute(query: "drop table t1");
+        try database?.execute("drop table t1");
         database = nil;
     }
 
@@ -60,11 +60,7 @@ class JSONContainer: Codable, DatabaseConvertibleStringValue, Equatable {
     static func == (lhs: JSONContainer, rhs: JSONContainer) -> Bool {
         return lhs.user == rhs.user && lhs.password == rhs.password;
     }
-    
-    func encode() -> String {
-        return String(data: try! JSONEncoder().encode(self), encoding: .utf8)!;
-    }
-    
+        
     enum CodingKeys: String, CodingKey {
         case user
         case password

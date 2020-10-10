@@ -40,6 +40,10 @@ public class Database: DatabaseWriter {
         return Int(sqlite3_last_insert_rowid(connection));
     }
     
+    public var changes: Int {
+        return Int(sqlite3_changes(connection));
+    }
+    
     public init (path: String, flags: Int32 = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX) throws {
         var handle: OpaquePointer? = nil;
         let code = sqlite3_open_v2(path, &handle, flags, nil);
@@ -63,8 +67,23 @@ public class Database: DatabaseWriter {
 
 extension Database {
     
-    public func execute(query: String) throws {
+    public func execute(_ query: String) throws {
         try createStatement(query: query).execute();
+    }
+    
+}
+
+extension Database {
+    
+    public func withTransaction(_ block: (DatabaseWriter) throws -> Void) throws {
+        try execute("BEGIN TRANSACTION");
+        do {
+            try block(self);
+            try execute("COMMIT TRANSACTION");
+        } catch {
+            try execute("ROLLBACK TRANSACTION");
+            throw error;
+        }
     }
     
 }

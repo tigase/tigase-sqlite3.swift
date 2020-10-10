@@ -1,5 +1,5 @@
 //
-// DBError.swift
+// DatabaseReader+Query.swift
 //
 // TigaseSQLite3.swift
 // Copyright (C) 2020 "Tigase, Inc." <office@tigase.com>
@@ -20,31 +20,23 @@
 //
 
 import Foundation
-import CSQLite
 
-public enum DBError: Error {
+extension DatabaseReader {
     
-    private static let successCodes = [ SQLITE_OK, SQLITE_ROW, SQLITE_DONE ];
-        
-    case sqliteError(errorCode: Int32, message: String?)
-    case invalidParameterName(name: String)
-    case unsupportedType(name: String)
-    case internalError
-    case invalidResult
-        
-    init?(resultCode: Int32) {
-        guard !DBError.successCodes.contains(resultCode) else {
-            return nil;
-        }
+    public func select(query: Query, cached: Bool = true, params: [String: Any?]) throws -> Cursor {
+        try self.select(query.statement, cached: cached, params: params)
+    }
 
-        self = .sqliteError(errorCode: resultCode, message: nil);
+    public func select(query: Query, cached: Bool = true, params: [Any?]) throws -> Cursor {
+        try self.select(query.statement, cached: cached, params: params)
     }
     
-    public init?(database: Database, resultCode: Int32) {
-        guard !DBError.successCodes.contains(resultCode) else {
-            return nil;
-        }
-
-        self = .sqliteError(errorCode: resultCode, message: database.errorMessage);
+    public func count(query: Query, cached: Bool = true, params: [String: Any?]) throws -> Int {
+        return try self.count(query.statement, cached: cached, params: params);
     }
+    
+    public func count(query: Query, cached: Bool = true, params: [Any?]) throws -> Int {
+        return try self.count(query.statement, cached: cached, params: params);
+    }
+
 }

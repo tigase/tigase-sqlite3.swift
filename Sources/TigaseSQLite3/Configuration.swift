@@ -30,9 +30,12 @@ public struct Configuration {
     /// Maximal size of readers pool
     public let maximalPoolSize: Int;
     
-    public init(path: String, initialPoolSize: Int = 1, maximalPoolSize: Int = 5) {
+    public var schemaMigrator: DatabaseSchemaMigrator?;
+    
+    public init(path: String, initialPoolSize: Int = 1, maximalPoolSize: Int = 5, schemaMigrator: DatabaseSchemaMigrator? = nil) {
         self.path = path;
         self.initialPoolSize = initialPoolSize;
         self.maximalPoolSize = maximalPoolSize;
+        self.schemaMigrator = schemaMigrator;
     }
 }

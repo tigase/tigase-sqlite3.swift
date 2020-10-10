@@ -38,3 +38,12 @@ public protocol DatabaseConvertibleIntValue {
     func encode() -> Data;
     
 }
+
+extension Encodable where Self: DatabaseConvertibleStringValue {
+
+    public func encode() -> String {
+        let data = try! JSONEncoder().encode(self);
+        return String(data: data, encoding: .utf8)!;
+    }
+
+}
