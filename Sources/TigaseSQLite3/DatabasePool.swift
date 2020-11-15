@@ -40,6 +40,11 @@ public class DatabasePool {
             try DatabaseSchemaManager().upgrade(database: writer, migrator: migrator);
         }
         self.writer = writer;
+        guard try "wal" == writer.select("PRAGMA journal_mode = WAL").mapFirst({ $0.string(at: 0) }) else {
+            throw DBError.internalError;
+        }
+        try writer.execute("PRAGMA synchronous = NORMAL");
+        
         readers = try Pool(initialSize: configuration.initialPoolSize, maxSize: configuration.maximalPoolSize, supplier: { try DatabasePool.openDatabaseReader(configuration: configuration)
         });
     }

@@ -62,7 +62,13 @@ public class Statement {
 
     public func execute(_ params: [String: Any?]) throws {
         try self.prepare(params);
-        let code = sqlite3_step(statement);
+        var code = SQLITE_OK;
+        while true {
+            code = sqlite3_step(statement);
+            if code != SQLITE_ROW {
+                break;
+            }
+        }
         guard code == SQLITE_DONE else {
             throw DBError(database: database, resultCode: code) ?? DBError.internalError;
         }
@@ -70,7 +76,13 @@ public class Statement {
     
     public func execute(_ params: [Any?] = []) throws {
         try self.prepare(params);
-        let code = sqlite3_step(statement);
+        var code = SQLITE_OK;
+        while true {
+            code = sqlite3_step(statement);
+            if code != SQLITE_ROW {
+                break;
+            }
+        }
         guard code == SQLITE_DONE else {
             throw DBError(database: database, resultCode: code) ?? DBError.internalError;
         }
