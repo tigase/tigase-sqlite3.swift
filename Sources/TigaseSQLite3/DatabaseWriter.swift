@@ -43,6 +43,8 @@ public protocol DatabaseWriter: DatabaseReader {
 
     func execute(_ query: String, params: [Any?]) throws;
     
+    func executeQueries(_ queries: String) throws;
+    
     func withTransaction(_ block: (DatabaseWriter) throws -> Void) throws;
 }
 

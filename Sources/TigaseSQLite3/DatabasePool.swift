@@ -45,6 +45,11 @@ public class DatabasePool {
         }
         try writer.execute("PRAGMA synchronous = NORMAL");
         
+        // workaround for missing WAL files
+        try writer.withTransaction({ writer in
+            try writer.executeQueries("create table workaround(col1 int);drop table workaround;");
+        })
+                
         readers = try Pool(initialSize: configuration.initialPoolSize, maxSize: configuration.maximalPoolSize, supplier: { try DatabasePool.openDatabaseReader(configuration: configuration)
         });
     }
@@ -80,7 +85,18 @@ public class DatabasePool {
     
     static func openDatabaseWriter(configuration: Configuration) throws -> DatabaseWriter {
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE |  SQLITE_OPEN_NOMUTEX;
-        return try openDatabase(configuration: configuration, flags: flags);
+        let database = try openDatabase(configuration: configuration, flags: flags);
+        
+        // make sure that WAL files are not removed
+        var flag: CInt = 1;
+        let code = withUnsafeMutablePointer(to: &flag) { flagp in
+            sqlite3_file_control(database.connection, nil, SQLITE_FCNTL_PERSIST_WAL, flagp);
+        }
+        guard let error = DBError(resultCode: code) else {
+            return database;
+        }
+        
+        throw error;
     }
     
     static func openDatabase(configuration: Configuration, flags: Int32) throws -> Database {

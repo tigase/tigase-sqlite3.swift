@@ -56,7 +56,7 @@ public class Database: DatabaseWriter {
     
     deinit {
         statementsCache.invalidate();
-        let result = sqlite3_close_v2(connection);
+        sqlite3_close_v2(connection);
     }
     
     public func freeMemory() {
@@ -67,8 +67,14 @@ public class Database: DatabaseWriter {
 
 extension Database {
     
-    public func execute(_ query: String) throws {
-        try createStatement(query: query).execute();
+    public func executeQueries(_ queries: String) throws {
+        let code = sqlite3_exec(self.connection, queries, nil, nil, nil);
+        print("executing new code, result: \(code)");
+        guard let error = DBError(database: self, resultCode: code) else {
+            return;
+        }
+        
+        throw error;
     }
     
 }
@@ -76,12 +82,12 @@ extension Database {
 extension Database {
     
     public func withTransaction(_ block: (DatabaseWriter) throws -> Void) throws {
-        try execute("BEGIN TRANSACTION");
+        try execute("BEGIN TRANSACTION;");
         do {
             try block(self);
-            try execute("COMMIT TRANSACTION");
+            try execute("COMMIT TRANSACTION;");
         } catch {
-            try execute("ROLLBACK TRANSACTION");
+            try execute("ROLLBACK TRANSACTION;");
             throw error;
         }
     }
