@@ -21,7 +21,7 @@
 
 import Foundation
 
-public protocol DatabaseReader: class {
+public protocol DatabaseReader: AnyObject {
     
     func select(_ query: String, cached: Bool, params: [String: Any?]) throws -> Cursor;
 
