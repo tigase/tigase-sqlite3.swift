@@ -27,22 +27,22 @@ public let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self
 
 public typealias SQLStatement = OpaquePointer;
 
-public class Statement {
+final class Statement {
     
-    unowned public let database: Database;
-    public let statement: SQLStatement;
+    private let connection: SQLConnection;
+    private let statement: SQLStatement;
     
-    public var parametersCount: Int {
+    private var parametersCount: Int {
         return Int(sqlite3_bind_parameter_count(statement));
     }
     
-    public init(database: Database, query: String) throws {
+    public init(connection: SQLConnection, query: String) throws {
         var handle: OpaquePointer? = nil;
-        let code = sqlite3_prepare_v2(database.connection, query, -1, &handle, nil);
+        let code = sqlite3_prepare_v2(connection, query, -1, &handle, nil);
         guard code == SQLITE_OK, let openedHandle = handle else {
-            throw DBError(database: database, resultCode: code) ?? DBError.internalError;
+            throw DBError(connection: connection, resultCode: code) ?? DBError.internalError;
         }
-        self.database = database;
+        self.connection = connection;
         self.statement = openedHandle;
     }
     
@@ -50,57 +50,22 @@ public class Statement {
         sqlite3_finalize(statement);
     }
     
-    public func query(_ params: [String: Any?]) throws -> Cursor {
-        try self.prepare(params);
-        return Cursor(database: database, statement: self);
-    }
-
-    public func query(_ params: [Any?] = []) throws -> Cursor {
-        try self.prepare(params);
-        return Cursor(database: database, statement: self);
-    }
-
-    public func execute(_ params: [String: Any?]) throws {
-        try self.prepare(params);
-        var code = SQLITE_OK;
-        while true {
-            code = sqlite3_step(statement);
-            if code != SQLITE_ROW {
-                break;
-            }
+    public func execute(params: [SQLValue]) throws -> [Row] {
+        try resetStatement();
+        defer {
+            resetBindings();
         }
-        guard code == SQLITE_DONE else {
-            throw DBError(database: database, resultCode: code) ?? DBError.internalError;
+        for position in 0..<params.count {
+            try bind(params[position], at: Int32(position) + 1);
         }
+        return try processResults();
     }
     
-    public func execute(_ params: [Any?] = []) throws {
-        try self.prepare(params);
-        var code = SQLITE_OK;
-        while true {
-            code = sqlite3_step(statement);
-            if code != SQLITE_ROW {
-                break;
-            }
+    public func execute(params: [String: SQLValue]) throws -> [Row] {
+        try resetStatement();
+        defer {
+            resetBindings();
         }
-        guard code == SQLITE_DONE else {
-            throw DBError(database: database, resultCode: code) ?? DBError.internalError;
-        }
-    }
-
-    
-    private func prepare(_ params: [String: Any?]) throws {
-        try bind(params: params);
-        try reset(bindings: false);
-    }
-
-    private func prepare(_ params: [Any?]) throws {
-        try bind(params: params);
-        try reset(bindings: false);
-    }
-
-    private func bind(params: [String: Any?]) throws {
-        try reset();
         for (name,value) in params {
             let position = sqlite3_bind_parameter_index(statement, ":\(name)");
             guard position != 0 || parametersCount == 0  else {
@@ -108,69 +73,138 @@ public class Statement {
             }
             try bind(value, at: position);
         }
+        return try processResults();
     }
     
-    private func bind(params: [Any?]) throws {
-        try reset();
-        for position in 0..<params.count {
-            try bind(params[position], at: Int32(position) + 1);
-        }
-    }
-    
-    private func bind(_ v: Any?, at pos: Int32) throws {
-        var r:Int32 = SQLITE_OK;
-        guard let value = v else {
-            r = sqlite3_bind_null(statement, pos);
-            if let error = DBError(database: database, resultCode: r) {
-                throw error;
+    private func processResults() throws -> [Row] {
+        let columnCount = Int(sqlite3_column_count(statement));
+        var results: [Row] = [];
+        guard columnCount > 0 else {
+            while true {
+                switch sqlite3_step(statement) {
+                case SQLITE_DONE:
+                    return results;
+                case let resultCode:
+                    throw DBError(connection: connection, resultCode: resultCode)!;
+                }
             }
-            return;
+            return results;
         }
         
-        switch value {
-        case let v as [UInt8]:
-            r = sqlite3_bind_blob(statement, pos, v, Int32(v.count), SQLITE_TRANSIENT);
-        case let v as Data:
-            r = v.withUnsafeBytes { (bytes) -> Int32 in
-                return sqlite3_bind_blob(statement, pos, bytes.baseAddress!, Int32(v.count), SQLITE_TRANSIENT);
+        let columnNames = (0..<Int32(columnCount)).map({ String(cString: sqlite3_column_name(statement, $0)!) })
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_DONE:
+                return results;
+            case SQLITE_ROW:
+                results.append(processResult(columnNames: columnNames));
+            case let resultCode:
+                throw DBError(connection: connection, resultCode: resultCode)!;
             }
-        case let v as Double:
-            r = sqlite3_bind_double(statement, pos, v);
-        case let v as UInt32:
-            r = sqlite3_bind_int(statement, pos, Int32(bitPattern: v));
-        case let v as Int32:
-            r = sqlite3_bind_int(statement, pos, v);
-        case let v as Int:
-            r = sqlite3_bind_int64(statement, pos, Int64(v));
-        case let v as Bool:
-            r = sqlite3_bind_int(statement, pos, Int32(v ? 1 : 0));
-        case let v as String:
-            r = sqlite3_bind_text(statement, pos, v, -1, SQLITE_TRANSIENT);
-        case let v as Date:
-            let timestamp = Int64(v.timeIntervalSince1970 * 1000);
-            r = sqlite3_bind_int64(statement, pos, timestamp);
-        case let v as DatabaseConvertibleStringValue:
-            try self.bind(v.encode(), at: pos);
-        case let v as DatabaseConvertibleIntValue:
-            try self.bind(v.encode(), at: pos);
-        case let v as DatabaseConvertibleDataValue:
-            try self.bind(v.encode(), at: pos);
-        default:
-            throw DBError.unsupportedType(name: v.self.debugDescription)
         }
-        if let error = DBError(database: database, resultCode: r) {
+    }
+    
+    private func processResult(columnNames: [String]) -> Row {
+        var row: Row = [:];
+        for (pos,name) in columnNames.enumerated() {
+            let idx = Int32(pos);
+            switch sqlite3_column_type(statement, idx) {
+            case SQLITE_NULL:
+                row[name] = .null;
+            case SQLITE_INTEGER:
+                row[name] = .integer(Int(sqlite3_column_int64(statement, idx)));
+            case SQLITE_FLOAT:
+                row[name] = .double(sqlite3_column_double(statement, idx));
+            case SQLITE_TEXT:
+                guard let ptr = sqlite3_column_text(statement, idx) else {
+                    continue;
+                }
+                row[name] = .text(String(cString: UnsafePointer(ptr)));
+            case SQLITE_BLOB:
+                guard let origPtr = sqlite3_column_blob(statement, idx) else {
+                    continue;
+                }
+                let count = Int(sqlite3_column_bytes(statement, idx));
+                row[name] = .blob(Data(bytes: origPtr, count: count));
+            default:
+                break;
+            }
+        }
+        return row;
+    }
+    
+    private func bind(_ v: SQLValue, at pos: Int32) throws {
+        var r:Int32 = SQLITE_OK;
+        switch v {
+        case .null:
+            r = sqlite3_bind_null(statement, pos);
+        case .integer(let value):
+            r = sqlite3_bind_int64(statement, pos, Int64(value));
+        case .double(let value):
+            r = sqlite3_bind_double(statement, pos, value);
+        case .text(let value):
+            r = sqlite3_bind_text(statement, pos, value, -1, SQLITE_TRANSIENT);
+        case .blob(let value):
+            r = value.withUnsafeBytes { (bytes) -> Int32 in
+                return sqlite3_bind_blob(statement, pos, bytes.baseAddress!, Int32(value.count), SQLITE_TRANSIENT);
+            }
+        }
+        if let error = DBError(connection: connection, resultCode: r) {
             throw error;
         }
     }
     
-    func reset(bindings: Bool = true) throws {
-        if let error = DBError(resultCode: sqlite3_reset(statement)) {
+    private func resetBindings() {
+        sqlite3_clear_bindings(statement);
+    }
+
+    private func resetStatement() throws {
+        if let error = DBError(connection: connection, resultCode: sqlite3_reset(statement)) {
             throw error;
         }
-        if bindings {
-            if let error = DBError(resultCode: sqlite3_clear_bindings(statement)) {
-                throw error;
+    }
+    
+}
+
+public typealias Row = Dictionary<String,SQLValue>
+
+extension Row {
+        
+    public subscript<T: SQLCodable, V: Decodable>(_ keyPath: KeyPath<T, V?>) -> V? {
+        do {
+            return try value(for: keyPath).value()
+        } catch {
+            fatalError("Failed to decode value: \(error.localizedDescription)")
+        }
+    }
+
+    public subscript<T: SQLCodable, V: Decodable>(_ keyPath: KeyPath<T, V>) -> V {
+        do {
+            guard let v: V = try value(for: keyPath).value() else {
+                fatalError("No value to decode!");
             }
+            return v;
+        } catch {
+            fatalError("Failed to decode value: \(error.localizedDescription)")
+        }
+    }
+
+    func value<T: SQLCodable,V>(for keyPath: KeyPath<T,V>) -> Value {
+        let name = T.keyPathToColumnName(for: keyPath);
+        guard let value = self[name] else {
+            fatalError("Value not available for column \(name))");
+        }
+        return value;
+    }
+    
+    public subscript<V: Decodable>(_ key: String) -> V? {
+        do {
+            guard let value = self[key] else {
+                fatalError("Value not available for column \(key))");
+            }
+            return try value.value();
+        } catch {
+            fatalError("Failed to decode value: \(error.localizedDescription)")
         }
     }
     

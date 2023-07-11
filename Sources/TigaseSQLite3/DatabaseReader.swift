@@ -22,36 +22,40 @@
 import Foundation
 
 public protocol DatabaseReader: AnyObject {
-    
-    func select(_ query: String, cached: Bool, params: [String: Any?]) throws -> Cursor;
 
-    func select(_ query: String, cached: Bool, params: [Any?]) throws -> Cursor;
-
-    func count(_ query: String, cached: Bool, params: [String: Any?]) throws -> Int
+    func select(_ query: String, cached: Bool, params: [SQLValue]) throws -> [Row];
     
-    func count(_ query: String, cached: Bool, params: [Any?]) throws -> Int
-    
+    func select(_ query: String, cached: Bool, params: [String:SQLValue]) throws -> [Row];
+        
 }
 
 extension DatabaseReader {
     
-    public func select(_ query: String, cached: Bool = true, params: [String: Any?]) throws -> Cursor {
-        return try select(query, cached: cached, params: params);
+    public func select(_ query: String, params: [SQLValue]) throws -> [Row] {
+        return try select(query, cached: true, params: params)
     }
 
-    public func select(_ query: String, cached: Bool = true, params: [Any?] = []) throws -> Cursor {
-        return try select(query, cached: cached, params: params);
+    public func select(_ query: String, params: [String:SQLValue]) throws -> [Row] {
+        return try select(query, cached: true, params: params)
+    }
+
+    public func select(_ query: String, cached: Bool = true, params: [String: Encodable?]) throws -> [Row] {
+        return try select(query, cached: cached, params: try params.mapValues(SQLValue.fromAny(_:)));
+    }
+
+    public func select(_ query: String, cached: Bool = true, params: [Encodable?] = []) throws -> [Row] {
+        return try select(query, cached: cached, params: try params.map(SQLValue.fromAny(_:)));
     }
     
-    public func count(_ query: String, cached: Bool = true, params: [String: Any?]) throws -> Int {
-        guard let value = try select(query, cached: cached, params: params).first()?.int(at: 0) else {
+    public func count(_ query: String, cached: Bool = true, params: [String: Encodable?]) throws -> Int {
+        guard let value = try select(query, cached: cached, params: params).first?["count"]?.int else {
             throw DBError.invalidResult;
         }
         return value;
     }
     
-    public func count(_ query: String, cached: Bool = true, params: [Any?] = []) throws -> Int {
-        guard let value = try select(query, cached: cached, params: params).first()?.int(at: 0) else {
+    public func count(_ query: String, cached: Bool = true, params: [Encodable?] = []) throws -> Int {
+        guard let value = try select(query, cached: cached, params: params).first?["count"]?.int else {
             throw DBError.invalidResult;
         }
         return value;

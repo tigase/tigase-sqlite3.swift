@@ -32,6 +32,6 @@ final class tigase_sqlite3_swiftTests: XCTestCase {
     }
 
     static var allTests = [
-        ("testExample", testExample),
+        ("testExample", testExample)
     ]
 }

@@ -21,6 +21,7 @@
 
 import Foundation
 import CSQLite
+import Combine
 
 public class DatabasePool {
     
@@ -40,29 +41,33 @@ public class DatabasePool {
             try DatabaseSchemaManager().upgrade(database: writer, migrator: migrator);
         }
         self.writer = writer;
-        guard try "wal" == writer.select("PRAGMA journal_mode = WAL").mapFirst({ $0.string(at: 0) }) else {
+        guard try "wal" == writer.select("PRAGMA journal_mode = WAL").first?["journal_mode"] else {
             throw DBError.internalError;
         }
         try writer.execute("PRAGMA synchronous = NORMAL");
         
         // workaround for missing WAL files
         try writer.withTransaction({ writer in
-            try writer.executeQueries("create table workaround(col1 int);drop table workaround;");
+            try writer.execute("create table workaround(col1 int);drop table workaround;");
         })
                 
         readers = try Pool(initialSize: configuration.initialPoolSize, maxSize: configuration.maximalPoolSize, supplier: { try DatabasePool.openDatabaseReader(configuration: configuration)
         });
     }
     
-    public func reader(_ block: (DatabaseReader) throws -> Void) throws {
+    public func changePublisher(for table: String) -> AnyPublisher<Change,Never> {
+        return writer.changePublisher(for: table);
+    }
+    
+    public func reader(_ block: (DatabaseReader) throws -> Void) rethrows {
         try readers.execute(block);
     }
 
-    public func reader<T>(_ block: (DatabaseReader) throws -> T) throws -> T {
+    public func reader<T>(_ block: (DatabaseReader) throws -> T) rethrows -> T {
         return try readers.execute(block);
     }
     
-    public func writer(_ block: (DatabaseWriter) throws -> Void) throws {
+    public func writer(_ block: (DatabaseWriter) throws -> Void) rethrows {
         writerSemphore.wait();
         defer {
             writerSemphore.signal();
@@ -70,7 +75,7 @@ public class DatabasePool {
         try block(writer);
     }
 
-    public func writer<T>(_ block: (DatabaseWriter) throws -> T) throws -> T {
+    public func writer<T>(_ block: (DatabaseWriter) throws -> T) rethrows -> T {
         writerSemphore.wait();
         defer {
             writerSemphore.signal();
@@ -80,28 +85,36 @@ public class DatabasePool {
 
     static func openDatabaseReader(configuration: Configuration) throws -> DatabaseReader {
         let flags = SQLITE_OPEN_READONLY |  SQLITE_OPEN_NOMUTEX;
-        return try openDatabase(configuration: configuration, flags: flags);
+        return try openDatabase(configuration: configuration, flags: flags, options: []);
     }
     
     static func openDatabaseWriter(configuration: Configuration) throws -> DatabaseWriter {
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE |  SQLITE_OPEN_NOMUTEX;
-        let database = try openDatabase(configuration: configuration, flags: flags);
-        
-        // make sure that WAL files are not removed
-        var flag: CInt = 1;
-        let code = withUnsafeMutablePointer(to: &flag) { flagp in
-            sqlite3_file_control(database.connection, nil, SQLITE_FCNTL_PERSIST_WAL, flagp);
-        }
-        guard let error = DBError(resultCode: code) else {
-            return database;
-        }
-        
-        throw error;
+        return try openDatabase(configuration: configuration, flags: flags, options: [.wal]);
     }
     
-    static func openDatabase(configuration: Configuration, flags: Int32) throws -> Database {
-        return try Database(path: configuration.path, flags: flags);
+    static func openDatabase(configuration: Configuration, flags: Int32, options: Database.Options) throws -> Database {
+        return try Database(path: configuration.path, flags: flags, options: options);
     }
+}
+
+extension DatabasePool: DatabaseReaderInternal, DatabaseWriterInternal {
+
+    func readInternal<R>(_ block: (DatabaseReader) throws -> R) rethrows -> R {
+        return try reader(block);
+    }
+    
+    func writeInternal<R>(_ block: (DatabaseWriter) throws -> R) rethrows -> R {
+        return try writer(block);
+    }
+    
+    public func execute(_ query: String) throws {
+        return try writer({ writer in
+            try writer.execute(query);
+        })
+    }
+    
+    
 }
 
 public typealias PoolSupplier<T> = () throws -> T;
@@ -110,7 +123,7 @@ public class Pool<T> {
     
     private let queue = DispatchQueue(label: "PoolQueue");
     
-    private var items: [Item<T>] = [];
+    private var items: [Item] = [];
     private let semaphore: DispatchSemaphore;
     private let supplier: PoolSupplier<T>;
     
@@ -131,7 +144,7 @@ public class Pool<T> {
         }
     }
             
-    public func execute<R>(_ block: (T) throws -> R) throws -> R {
+    public func execute<R>(_ block: (T) throws -> R) rethrows -> R {
         semaphore.wait();
         let item = try queue.sync { try self.acquire() };
         defer {
@@ -143,7 +156,7 @@ public class Pool<T> {
         return try block(item.value);
     }
     
-    private func acquire() throws -> Item<T> {
+    private func acquire() throws -> Item {
         if let it = self.items.first(where: { !$0.inUse }) {
             return it.acquire();
         } else {
@@ -153,7 +166,7 @@ public class Pool<T> {
         }
     }
     
-    public class Item<T> {
+    public class Item {
         
         public let value: T;
         public private(set) var inUse: Bool = false;
@@ -162,7 +175,7 @@ public class Pool<T> {
             self.value = value;
         }
         
-        func acquire() -> Item<T> {
+        func acquire() -> Item {
             self.inUse = true;
             return self;
         }

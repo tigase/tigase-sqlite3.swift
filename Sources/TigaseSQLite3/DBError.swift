@@ -24,6 +24,13 @@ import CSQLite
 
 public enum DBError: Error {
     
+    public static func message(from connection: SQLConnection) -> String? {
+        if let tmp = sqlite3_errmsg(connection) {
+            return String(cString: tmp);
+        }
+        return nil;
+    }
+    
     private static let successCodes = [ SQLITE_OK, SQLITE_ROW, SQLITE_DONE ];
         
     case sqliteError(errorCode: Int32, message: String?)
@@ -39,12 +46,20 @@ public enum DBError: Error {
 
         self = .sqliteError(errorCode: resultCode, message: nil);
     }
-    
-    public init?(database: Database, resultCode: Int32) {
+
+    public init?(connection: SQLConnection, resultCode: Int32) {
         guard !DBError.successCodes.contains(resultCode) else {
             return nil;
         }
 
-        self = .sqliteError(errorCode: resultCode, message: database.errorMessage);
+        self = .sqliteError(errorCode: resultCode, message: DBError.message(from: connection));
     }
+    
+//    public init?(database: Database, resultCode: Int32) {
+//        guard !DBError.successCodes.contains(resultCode) else {
+//            return nil;
+//        }
+//
+//        self = .sqliteError(errorCode: resultCode, message: database.errorMessage);
+//    }
 }
