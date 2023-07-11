@@ -39,14 +39,14 @@ class DatabaseMultilineExec: XCTestCase {
     }
 
     func test() throws {
-        try database?.executeQueries("create table test1(col1 integer, col2 text);\ncreate table test2(col1 integer, col2 text)");
+        try database?.execute("create table test1(col1 integer, col2 text);\ncreate table test2(col1 integer, col2 text)");
         try database?.select("select col1, col2 from test1");
         try database?.select("select col1, col2 from test2");
     }
     
     func testTrasnaction1() throws {
         try database?.withTransaction({ database in
-            try database.executeQueries("create table test1(col1 integer, col2 text);\ncreate table test2(col1 integer, col2 text)");
+            try database.execute("create table test1(col1 integer, col2 text);\ncreate table test2(col1 integer, col2 text)");
         })
         try database?.select("select col1, col2 from test1");
         try database?.select("select col1, col2 from test2");
@@ -55,7 +55,7 @@ class DatabaseMultilineExec: XCTestCase {
 
     func testTrasnaction2() throws {
         try database?.execute("BEGIN TRANSACTION;");
-        try database?.executeQueries("create table test1(col1 integer, col2 text);\ncreate table test2(col1 integer, col2 text)");
+        try database?.execute("create table test1(col1 integer, col2 text);\ncreate table test2(col1 integer, col2 text)");
         try database?.execute("COMMIT TRANSACTION;");
         try database?.select("select col1, col2 from test1");
         try database?.select("select col1, col2 from test2");

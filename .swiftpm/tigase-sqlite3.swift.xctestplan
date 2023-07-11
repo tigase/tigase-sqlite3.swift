@@ -1,0 +1,31 @@
+{
+  "configurations" : [
+    {
+      "id" : "8AF70C95-5A02-4F68-8D20-A877F1884A38",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "TigaseSQLite3MacrosTests",
+        "name" : "TigaseSQLite3MacrosTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "TigaseSQLite3Tests",
+        "name" : "TigaseSQLite3Tests"
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -44,19 +44,19 @@ class DatabaseConvertibleTest: XCTestCase {
     func testExample() throws {
         let jid = JID("test-value");
         try database?.insert("insert into t1(col2) values (:jid)", params: ["jid": jid])
-        let result = try database?.select("select col2 from t1").mapFirst { $0.jid(at: 0) };
+        let result: JID? = try database?.select("select col2 from t1").first?["col2"]// .mapFirst { $0.jid(at: 0) };
         XCTAssertEqual(jid, result, "database convertible values do not match");
     }
 
     func testCodable() throws {
         let value = JSONContainer(user: "Test", password: "Password");
         try database?.insert("insert into t1(col2) values (:value)", params: ["value": value]);
-        let result = try database?.select("select col2 from t1").mapFirst { c -> JSONContainer? in c.object(at: 0) };
+        let result: JSONContainer? = try database?.select("select col2 from t1").first?["col2"] //.mapFirst { c -> JSONContainer? in c.object(at: 0) };
         XCTAssertEqual(value, result, "database convertible values do not match");
     }
 }
 
-class JSONContainer: Codable, DatabaseConvertibleStringValue, Equatable {
+class JSONContainer: Codable, Equatable {
     static func == (lhs: JSONContainer, rhs: JSONContainer) -> Bool {
         return lhs.user == rhs.user && lhs.password == rhs.password;
     }
@@ -74,8 +74,11 @@ class JSONContainer: Codable, DatabaseConvertibleStringValue, Equatable {
         self.password = password;
     }
 }
-
-class JID: Equatable {
+class JID: LosslessStringConvertible, Codable, Equatable {
+    var description: String {
+        return value;
+    }
+    
     static func == (lhs: JID, rhs: JID) -> Bool {
         return lhs.value == rhs.value;
     }
@@ -83,26 +86,26 @@ class JID: Equatable {
     
     let value: String;
     
-    init(_ value: String) {
+    required init(_ value: String) {
         self.value = value;
     }
         
 }
 
-extension JID: DatabaseConvertibleStringValue {
+//extension JID: DatabaseConvertibleStringValue {
+//
+//    func encode() -> String {
+//        return value;
+//    }
+//    
+//}
 
-    func encode() -> String {
-        return value;
-    }
-    
-}
-
-extension Cursor {
-    
-    func jid(at column: Int) -> JID? {
-        guard let value: String = self[column] else {
-            return nil;
-        }
-        return JID(value);
-    }
-}
+//extension Cursor {
+//    
+//    func jid(at column: Int) -> JID? {
+//        guard let value: String = self[column] else {
+//            return nil;
+//        }
+//        return JID(value);
+//    }
+//}

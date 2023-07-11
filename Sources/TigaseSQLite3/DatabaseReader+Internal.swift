@@ -1,5 +1,5 @@
 //
-// Cursor+Codable.swift
+// DatabaseReaderInternal.swift
 //
 // TigaseSQLite3.swift
 // Copyright (C) 2020 "Tigase, Inc." <office@tigase.com>
@@ -18,25 +18,29 @@
 // along with this program. Look for COPYING file in the top folder.
 // If not, see http://www.gnu.org/licenses/.
 //
+//
 
 import Foundation
 
-extension Cursor {
+protocol DatabaseReaderInternal: DatabaseReader {
     
-    public func object<T: Codable>(at column: Int) -> T? {
-        guard let value = string(at: column) else {
-            return nil;
-        }
-        return try? JSONDecoder().decode(T.self, from: value.data(using: .utf8)!);
-    }
-
-    public func object<T: Codable>(for column: String) -> T? {
-        guard let value = string(for: column) else {
-            return nil;
-        }
-        return try? JSONDecoder().decode(T.self, from: value.data(using: .utf8)!);
-    }
-
+    func readInternal<R>(_ block: (DatabaseReader) throws -> R) rethrows -> R;
+    
 }
 
-
+extension DatabaseReaderInternal {
+    
+    public func select(_ query: String, cached: Bool, params: [String : SQLValue]) throws -> [Row] {
+        return try readInternal({ reader in
+            return try reader.select(query, cached: cached, params: params);
+        })
+    }
+    
+    
+    public func select(_ query: String, cached: Bool, params: [SQLValue]) throws -> [Row] {
+        return try readInternal({ reader in
+            return try reader.select(query, cached: cached, params: params);
+        })
+    }
+    
+}

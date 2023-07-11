@@ -1,5 +1,5 @@
 //
-// DatabaseReader+Query.swift
+// UnfairLock.swift
 //
 // TigaseSQLite3.swift
 // Copyright (C) 2020 "Tigase, Inc." <office@tigase.com>
@@ -18,25 +18,48 @@
 // along with this program. Look for COPYING file in the top folder.
 // If not, see http://www.gnu.org/licenses/.
 //
+//
 
 import Foundation
 
-extension DatabaseReader {
+public class UnfairLock {
     
-    public func select(query: Query, cached: Bool = true, params: [String: Encodable?]) throws -> [Row] {
-        try self.select(query.statement, cached: cached, params: params)
+    private var lock_s = os_unfair_lock();
+    
+    public init() {}
+    
+    public func lock() {
+        os_unfair_lock_lock(&lock_s);
+    }
+    
+    public func unlock() {
+        os_unfair_lock_unlock(&lock_s);
+    }
+    
+    @discardableResult
+    public func with<T>(_ operation: ()->T) -> T {
+        lock();
+        defer {
+            unlock();
+        }
+        return operation();
     }
 
-    public func select(query: Query, cached: Bool = true, params: [Encodable?]) throws -> [Row] {
-        try self.select(query.statement, cached: cached, params: params)
+    @discardableResult
+    public func with<T>(_ operation: () throws -> T) rethrows -> T {
+        lock();
+        defer {
+            unlock();
+        }
+        return try operation();
     }
-    
-    public func count(query: Query, cached: Bool = true, params: [String: Encodable?]) throws -> Int {
-        return try self.count(query.statement, cached: cached, params: params);
-    }
-    
-    public func count(query: Query, cached: Bool = true, params: [Encodable?]) throws -> Int {
-        return try self.count(query.statement, cached: cached, params: params);
+
+    public func with(_ operation: ()->Void) {
+        lock();
+        defer {
+            unlock();
+        }
+        operation();
     }
 
 }

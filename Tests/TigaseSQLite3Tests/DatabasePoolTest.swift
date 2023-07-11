@@ -29,55 +29,63 @@ class DatabasePoolTest: XCTestCase {
     var databasePool: DatabasePool?;
     
     override func setUpWithError() throws {
-        try databasePool = DatabasePool(configuration: Configuration(path: "file::memory:?cache=shared"));
-        try databasePool?.writer({ database in
-            try database.execute("create table t1(col1 id integer primary key asc, col2 text)");
-        })
+        try databasePool = DatabasePool(configuration: Configuration(path: "file::memory"));
+        try databasePool?.execute("create table t1(col1 id integer primary key asc, col2 text)");
         // Put setup code here. This method is called before the invocation of each test method in the class.
     }
 
     override func tearDownWithError() throws {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
-        try databasePool?.writer({ database in
-            try database.execute("drop table t1");
-        })
+        try databasePool?.execute("drop table t1");
         databasePool = nil;
     }
 
     func testSimple() throws {
         let jid = JID("test-value");
-        try databasePool?.writer({ database in
-            try database.insert("insert into t1(col2) values (:jid)", params: ["jid": jid])
-        })
+        try databasePool?.insert("insert into t1(col2) values (:jid)", params: ["jid": jid])
         
-        let result = try databasePool?.reader({ database in
-            try database.select("select col2 from t1").mapFirst { $0.jid(at: 0) };
-        });
+        let result: JID? = try databasePool?.select("select col2 from t1").first?["col2"]// { $0.jid(at: 0) };
         XCTAssertEqual(jid, result, "database convertible values do not match");
     }
 
     func testAdvanced() throws {
         let jid = JID("test-value");
-        try databasePool?.writer({ database in
-            try database.insert("insert into t1(col2) values (:jid)", params: ["jid": jid])
-        })
-        
-        let result = try databasePool?.reader({ db1 -> JID? in
+        try databasePool?.insert("insert into t1(col2) values (:jid)", params: ["jid": jid])
+
+        let result: JID? = try databasePool?.reader({ db1 -> JID? in
             let x2 = try databasePool?.reader({ db2 -> JID? in
                 let x3 = try databasePool?.reader({ db3 -> JID? in
                     XCTAssert(db3 !== db2)
-                    return try db3.select("select col2 from t1").mapFirst { $0.jid(at: 0) };
+                    return try db3.select("select col2 from t1").first?["col2"];// { $0.jid(at: 0) };
                 });
                 XCTAssert(db1 !== db2)
-                let x2 = try db2.select("select col2 from t1").mapFirst { $0.jid(at: 0) };
+                let x2: JID? = try db2.select("select col2 from t1").first?["col2"];//.mapFirst { $0.jid(at: 0) };
                 XCTAssertEqual(x3, x2);
                 return x2;
             })
-            let x1 = try db1.select("select col2 from t1").mapFirst { $0.jid(at: 0) };
+            let x1: JID? = try db1.select("select col2 from t1").first?["col2"];//.mapFirst { $0.jid(at: 0) };
             XCTAssertEqual(x1, x2);
             return x1;
         });
         XCTAssertEqual(jid, result, "database convertible values do not match");
+    }
+    
+    func testChangePublisher() throws {
+        let jid = JID("test-value");
+        let jid2 = JID("test2-value");
+        let publisher = databasePool!.changePublisher(for: "t1");
+//        let publisher = try databasePool!.writer({ database in
+//            database.changePublisher(for: "t1");
+//        });
+        let cancellable = publisher.sink(receiveValue: { change in
+            print("changed row: \(change)");
+        });
+        try databasePool!.insert("insert into t1(col2) values (:jid)", params: ["jid": jid]);
+        try databasePool!.withTransaction({ database in
+            try database.update("update t1 set col2 = :jid where col2 = :jid1", params: ["jid1": jid, "jid": jid2]);
+            try database.update("update t1 set col2 = :jid where col2 = :jid1", params: ["jid1": jid, "jid": jid2]);
+            try database.insert("insert into t1(col2) values (:jid)", params: ["jid": jid]);
+        })
     }
 
     // Measured time is 0.212s
@@ -90,10 +98,8 @@ class DatabasePoolTest: XCTestCase {
         self.measure {
             do {
                 for _ in 0..<1000 {
-                    try databasePool?.writer({ database in
-                        let count = try database.select("select * from t1", cached: true).mapAll({ c in return true }).count;
-                        assert(count == 1000)
-                    })
+                    let count = try databasePool!.select("select * from t1", cached: true).count;
+                    assert(count == 1000)
                 }
             } catch {}
         }
@@ -113,10 +119,8 @@ class DatabasePoolTest: XCTestCase {
             for _ in 0..<200 {
                 queues[i].addOperation {
                     do {
-                        try self.databasePool?.reader({ database in
-                            let count = try database.select("select * from t1", cached: true).mapAll({ c in return true }).count;
-                            assert(count == 1000)
-                        })
+                        let count = try self.databasePool!.select("select * from t1", cached: true).count;
+                        assert(count == 1000)
                     } catch {}
                 }
             }

@@ -23,59 +23,143 @@ import Foundation
 
 public protocol DatabaseWriter: DatabaseReader {
     
-    var changes: Int { get }
+    var changesCount: Int { get }
+    var lastInsertedId: Int { get }
+        
+    func changePublisher(for tableName: String) -> AnyPublisher<Change,Never>;
     
-    var lastInsertedRowId: Int? { get }
-
-    func delete(_ query: String, cached: Bool, params: [String: Any?]) throws;
-
-    func delete(_ query: String, cached: Bool, params: [Any?]) throws;
-
-    func insert(_ query: String, cached: Bool, params: [String: Any?]) throws;
-
-    func insert(_ query: String, cached: Bool, params: [Any?]) throws;
+    func withTransaction<R>(_ block: (DatabaseWriter) throws -> R) throws -> R;
     
-    func update(_ query: String, cached: Bool, params: [String: Any?]) throws;
+    func delete(_ query: String, cached: Bool, params: [SQLValue]) throws;
+    
+    func delete(_ query: String, cached: Bool, params: [String:SQLValue]) throws;
 
-    func update(_ query: String, cached: Bool, params: [Any?]) throws;
+    func insert(_ query: String, cached: Bool, params: [SQLValue]) throws;
     
-    func execute(_ query: String, params: [String: Any?]) throws;
-
-    func execute(_ query: String, params: [Any?]) throws;
+    func insert(_ query: String, cached: Bool, params: [String:SQLValue]) throws;
     
-    func executeQueries(_ queries: String) throws;
+    func update(_ query: String, cached: Bool, params: [SQLValue]) throws;
     
-    func withTransaction(_ block: (DatabaseWriter) throws -> Void) throws;
+    func update(_ query: String, cached: Bool, params: [String:SQLValue]) throws;
+ 
+    func execute(_ query: String) throws;
 }
 
 extension DatabaseWriter {
     
-    public func delete(_ query: String, cached: Bool = true, params: [String: Any?]) throws {
-        try delete(query, cached: cached, params: params);
+    public func delete(_ query: String, cached: Bool = true, params: [String: Encodable?]) throws {
+        try delete(query, cached: cached, params: params.mapValues(SQLValue.fromAny(_:)));
     }
 
-    public func delete(_ query: String, cached: Bool = true, params: [Any?] = []) throws {
-        try delete(query, cached: cached, params: params);
+    public func delete(_ query: String, cached: Bool = true, params: [Encodable?] = []) throws {
+        try delete(query, cached: cached, params: params.map(SQLValue.fromAny(_:)));
     }
 
-    public func insert(_ query: String, cached: Bool = true, params: [String: Any?]) throws {
-        try insert(query, cached: cached, params: params);
+    public func insert(_ query: String, cached: Bool = true, params: [String: Encodable?]) throws {
+        try insert(query, cached: cached, params: params.mapValues(SQLValue.fromAny(_:)));
     }
 
-    public func insert(_ query: String, cached: Bool = true, params: [Any?] = []) throws {
-        try insert(query, cached: cached, params: params);
+    public func insert(_ query: String, cached: Bool = true, params: [Encodable?] = []) throws {
+        try insert(query, cached: cached, params: params.map(SQLValue.fromAny(_:)));
     }
     
-    public func update(_ query: String, cached: Bool = true, params: [String: Any?]) throws {
-        try update(query, cached: cached, params: params);
+    public func update(_ query: String, cached: Bool = true, params: [String: Encodable?]) throws {
+        try update(query, cached: cached, params: params.mapValues(SQLValue.fromAny(_:)));
     }
 
-    public func update(_ query: String, cached: Bool = true, params: [Any?] = []) throws {
-        try update(query, cached: cached, params: params);
-    }
-    
-    public func execute(_ query: String, params: [Any?] = []) throws {
-        try execute(query, params: params);
+    public func update(_ query: String, cached: Bool = true, params: [Encodable?] = []) throws {
+        try update(query, cached: cached, params: params.map(SQLValue.fromAny(_:)));
     }
 
 }
+
+extension DatabaseWriter {
+    
+    public func delete(_ query: String,  params: [SQLValue]) throws {
+        try delete(query, cached: true, params: params)
+    }
+    
+    public func insert(_ query: String, params: [SQLValue]) throws {
+        try insert(query, cached: true, params: params)
+    }
+
+    public func update(_ query: String, params: [SQLValue]) throws {
+        try update(query, cached: true, params: params)
+    }
+}
+
+import Combine
+
+public struct Change: Sendable {
+    
+    public let table: String;
+    public let rowIds: Set<Int64>;
+    
+}
+
+class ChangesObserver {
+    
+    private let lock = UnfairLock();
+    private var publishers: [String: PassthroughSubject<Change,Never>] = [:];
+    private var changes: [String: Change] = [:];
+    private var transactions: Set<UInt64> = [];
+
+    func beginTransaction(_ transactionId: UInt64) {
+        lock.with({
+            transactions.insert(transactionId);
+        })
+    }
+    
+    func endTransaction(_ transactionId: UInt64) {
+        let needFlush = lock.with({
+            transactions.remove(transactionId);
+            return transactions.isEmpty && !changes.isEmpty;
+        })
+        if needFlush {
+            flush();
+        }
+    }
+    
+    func changePublisher(table: String) -> AnyPublisher<Change, Never> {
+        return lock.with({
+            guard let publisher = publishers[table] else {
+                print("creating publisher for", table)
+                let publisher = PassthroughSubject<Change,Never>();
+                publishers[table] = publisher;
+                return publisher;
+            }
+            return publisher;
+        }).eraseToAnyPublisher();
+    }
+    
+    func reportChange(table: String, rowId: Int64) {
+        print("reporting change:", table, rowId)
+        let needFlush = lock.with({
+            if let change = changes[table] {
+                var rowsIds = change.rowIds;
+                rowsIds.insert(rowId);
+                changes[table] = Change(table: table, rowIds: rowsIds);
+            } else {
+                changes[table] = Change(table: table, rowIds: [rowId]);
+            }
+            return transactions.isEmpty;
+        });
+        if needFlush {
+            flush();
+        }
+    }
+ 
+    private func flush() {
+        lock.with({
+            print("flushing..")
+            for (table,change) in changes {
+                print("sending change", table, change, publishers[table])
+                if let publisher = publishers[table] {
+                    publisher.send(change);
+                }
+            }
+            changes.removeAll(keepingCapacity: false);
+        })
+    }
+}
+

@@ -1,5 +1,5 @@
 //
-// StatementCache.swift
+// ColumnMacro.swift
 //
 // TigaseSQLite3.swift
 // Copyright (C) 2020 "Tigase, Inc." <office@tigase.com>
@@ -18,34 +18,32 @@
 // along with this program. Look for COPYING file in the top folder.
 // If not, see http://www.gnu.org/licenses/.
 //
+//
 
-import Foundation
-import CSQLite
+import SwiftSyntax
+import SwiftSyntaxMacros
+import SwiftSyntaxBuilder
+import SwiftDiagnostics
 
-public class StatementCache {
+enum ColumnMacroError: CustomStringConvertible, Error {
+    case notForStaticFields
     
-    private unowned let database: Database;
-    private var statements: [String: Statement] = [:];
-    
-    init(database: Database) {
-        self.database = database;
-    }
-    
-    deinit {
-        statements.removeAll();
-    }
-    
-    public func statement(query: String) throws -> Statement {
-        guard let statement = statements[query] else {
-            let statement = try database.createStatement(query: query);
-            statements[query] = statement;
-            return statement;
+    var description: String {
+        switch self {
+        case .notForStaticFields:
+            return "Not available for static fields"
         }
-        return statement;
     }
     
-    public func invalidate() {
-        statements.removeAll();
-    }
 }
 
+public struct ColumnMacro: PeerMacro {
+    
+    public static func expansion(of node: SwiftSyntax.AttributeSyntax, providingPeersOf declaration: some SwiftSyntax.DeclSyntaxProtocol, in context: some SwiftSyntaxMacros.MacroExpansionContext) throws -> [SwiftSyntax.DeclSyntax] {
+        guard let varDecl = declaration.as(VariableDeclSyntax.self), !varDecl.isStatic else {
+            throw ColumnMacroError.notForStaticFields;
+        }
+        return []
+    }
+        
+}

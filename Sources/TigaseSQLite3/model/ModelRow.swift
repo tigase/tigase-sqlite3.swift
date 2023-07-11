@@ -1,5 +1,5 @@
 //
-// DatabaseReader+Query.swift
+// ModelRow.swift
 //
 // TigaseSQLite3.swift
 // Copyright (C) 2020 "Tigase, Inc." <office@tigase.com>
@@ -18,25 +18,33 @@
 // along with this program. Look for COPYING file in the top folder.
 // If not, see http://www.gnu.org/licenses/.
 //
+//
 
 import Foundation
 
-extension DatabaseReader {
-    
-    public func select(query: Query, cached: Bool = true, params: [String: Encodable?]) throws -> [Row] {
-        try self.select(query.statement, cached: cached, params: params)
-    }
+public struct ModelRow<T: SQLCodable>: CustomDebugStringConvertible, Equatable {
 
-    public func select(query: Query, cached: Bool = true, params: [Encodable?]) throws -> [Row] {
-        try self.select(query.statement, cached: cached, params: params)
+    public var debugDescription: String {
+        return "ModelRow(row: \(row.debugDescription))"
     }
     
-    public func count(query: Query, cached: Bool = true, params: [String: Encodable?]) throws -> Int {
-        return try self.count(query.statement, cached: cached, params: params);
+    let row: Row;
+    
+    
+    init(row: Row) {
+        self.row = row;
     }
     
-    public func count(query: Query, cached: Bool = true, params: [Encodable?]) throws -> Int {
-        return try self.count(query.statement, cached: cached, params: params);
+    public subscript(_ columnName: String) -> SQLValue? {
+        return row[columnName];
+    }
+    
+    public subscript<V: Decodable>(_ keyPath: KeyPath<T,V>) -> V {
+        return row[keyPath];
+    }
+    
+    public subscript<V: Decodable>(_ keyPath: KeyPath<T,V?>) -> V? {
+        return row[keyPath];
     }
 
 }

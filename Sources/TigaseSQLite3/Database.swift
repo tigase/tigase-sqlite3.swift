@@ -21,75 +21,44 @@
 
 import Foundation
 import CSQLite
+import Combine
 
-public typealias SQLConnection = OpaquePointer;
-
-public class Database: DatabaseWriter {
-    public let connection: SQLConnection;
-    
-    lazy var statementsCache = StatementCache(database: self);
-    
-    public var errorMessage: String? {
-        if let tmp = sqlite3_errmsg(connection) {
-            return String(cString: tmp);
-        }
-        return nil;
-    }
-    
-    public var lastInsertedRowId: Int? {
-        return Int(sqlite3_last_insert_rowid(connection));
-    }
-    
-    public var changes: Int {
-        return Int(sqlite3_changes(connection));
-    }
-    
-    public init (path: String, flags: Int32 = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX) throws {
-        var handle: OpaquePointer? = nil;
-        let code = sqlite3_open_v2(path, &handle, flags, nil);
-        guard code == SQLITE_OK, let openedHandle = handle else {
-            sqlite3_close_v2(handle);
-            throw DBError(resultCode: code) ?? DBError.internalError;
-        }
-        self.connection = openedHandle;
-    }
-    
-    deinit {
-        statementsCache.invalidate();
-        sqlite3_close_v2(connection);
-    }
-    
-    public func freeMemory() {
-        statementsCache.invalidate();
-    }
-    
-}
-
-extension Database {
-    
-    public func executeQueries(_ queries: String) throws {
-        let code = sqlite3_exec(self.connection, queries, nil, nil, nil);
-        print("executing new code, result: \(code)");
-        guard let error = DBError(database: self, resultCode: code) else {
-            return;
-        }
+public class Database: DatabaseReaderInternal, DatabaseWriterInternal {
+ 
+    public struct Options: OptionSet {
         
-        throw error;
+        static let wal = Options(rawValue: 1 << 0)
+        
+        public var rawValue: UInt;
+
+        public init(rawValue: UInt) {
+            self.rawValue = rawValue
+        }
     }
     
-}
-
-extension Database {
+    private let lock = UnfairLock();
+    private let core: DatabaseCore;
     
-    public func withTransaction(_ block: (DatabaseWriter) throws -> Void) throws {
-        try execute("BEGIN TRANSACTION;");
-        do {
-            try block(self);
-            try execute("COMMIT TRANSACTION;");
-        } catch {
-            try execute("ROLLBACK TRANSACTION;");
-            throw error;
-        }
+    public init(path: String, flags: Int32 = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, options: Options = []) throws {
+        core = try DatabaseCore(path: path, flags: flags, options: options);
+    }
+    
+    func readInternal<R>(_ block: (DatabaseReader) throws -> R) rethrows -> R {
+        return try lock.with({
+            return try block(core);
+        })
+    }
+    
+    func writeInternal<R>(_ block: (DatabaseWriter) throws -> R) rethrows -> R {
+        return try lock.with({
+            return try block(core);
+        })
+    }
+
+    public func execute(_ query: String) throws {
+        try writeInternal({ writer in
+            try writer.execute(query);
+        })
     }
     
 }

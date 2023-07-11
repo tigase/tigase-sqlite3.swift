@@ -23,36 +23,36 @@ import Foundation
 
 extension DatabaseWriter {
     
-    public func delete(query: Query, cached: Bool = true, params: [String: Any?]) throws {
+    public func delete(query: Query, cached: Bool = true, params: [String: Encodable?]) throws {
         try delete(query.statement, cached: cached, params: params);
     }
 
-    public func delete(query: Query, cached: Bool = true, params: [Any?] = []) throws {
+    public func delete(query: Query, cached: Bool = true, params: [Encodable?] = []) throws {
         try delete(query.statement, cached: cached, params: params);
     }
 
-    public func insert(query: Query, cached: Bool = true, params: [String: Any?]) throws {
+    public func insert(query: Query, cached: Bool = true, params: [String: Encodable?]) throws {
         try insert(query.statement, cached: cached, params: params);
     }
 
-    public func insert(query: Query, cached: Bool = true, params: [Any?] = []) throws {
+    public func insert(query: Query, cached: Bool = true, params: [Encodable?] = []) throws {
         try insert(query.statement, cached: cached, params: params);
     }
     
-    public func update(query: Query, cached: Bool = true, params: [String: Any?]) throws {
+    public func update(query: Query, cached: Bool = true, params: [String: Encodable?]) throws {
         try update(query.statement, cached: cached, params: params);
     }
 
-    public func update(query: Query, cached: Bool = true, params: [Any?] = []) throws {
+    public func update(query: Query, cached: Bool = true, params: [Encodable?] = []) throws {
         try update(query.statement, cached: cached, params: params);
     }
 
-    public func execute(query: Query, params: [String: Any?]) throws {
-        try execute(query.statement, params: params);
-    }
-
-    public func execute(query: Query, params: [Any?] = []) throws {
-        try execute(query.statement, params: params);
-    }
+//    public func execute(query: Query, params: [String: Encodable?]) throws {
+//        try execute(query.statement, cached: false, params: params.mapValues(SQLValue.fromAny(_:)));
+//    }
+//
+//    public func execute(query: Query, params: [Encodable?] = []) throws {
+//        try execute(query.statement, cached: false, params: params.map(SQLValue.fromAny(_:)));
+//    }
 
 }
