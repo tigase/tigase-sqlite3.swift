@@ -82,7 +82,7 @@ public struct QueryMacro: ExpressionMacro {
             throw QueryMacroError.missingTrailigClosure;
         }
                     
-        guard let typeName = macroExpr.genericArguments?.arguments.first?.argumentType.as(SimpleTypeIdentifierSyntax.self)?.name.text else {
+        guard let typeName = macroExpr.genericArgumentClause?.arguments.first?.argument.as(IdentifierTypeSyntax.self)?.name.text else {
             throw QueryMacroError.missingGenericTypeParameter;
         }
 //
@@ -97,7 +97,7 @@ public struct QueryMacro: ExpressionMacro {
 //            ]));
 //        }
         
-        let entityVariable = closure.signature?.input?.as(ClosureParamListSyntax.self)?.first?.name.text ?? "$0";
+        let entityVariable = closure.signature?.parameterClause?.as(ClosureShorthandParameterListSyntax.self)?.first?.name.text ?? "$0";
                         
         guard let statement = closure.statements.first, closure.statements.count == 1 else {
             throw QueryMacroError.onlySingleStatementExpressionsSupported;
@@ -127,7 +127,7 @@ public struct QueryMacro: ExpressionMacro {
     
     private static func getExpressions(item: SyntaxProtocol) throws -> [ExprSyntax] {
         if let infix = item.as(InfixOperatorExprSyntax.self) {
-            return [infix.leftOperand, infix.operatorOperand, infix.rightOperand].compactMap({ $0 });
+            return [infix.leftOperand, infix.operator, infix.rightOperand].compactMap({ $0 });
         }
         if let sequenceExprSyntax = item.as(SequenceExprSyntax.self) {
             return sequenceExprSyntax.elements.map({ $0 });
@@ -146,20 +146,20 @@ public struct QueryMacro: ExpressionMacro {
         var lastMember: MemberAccessExprSyntax?;
         var isCoalesce = false;
         for element in elements {
-            let forcedValueElement = element.as(ForcedValueExprSyntax.self);
-            if let memberAccess = (forcedValueElement?.expression ?? element).as(MemberAccessExprSyntax.self), memberAccess.base?.as(IdentifierExprSyntax.self)?.identifier.text == entityVariable {
-                queryParts.append("\\(\(typeName).keyPathToColumnName(for: \\.\(memberAccess.name.text)))");
+            let forcedValueElement = element.as(ForceUnwrapExprSyntax.self);
+            if let memberAccess = (forcedValueElement?.expression ?? element).as(MemberAccessExprSyntax.self), memberAccess.base?.as(DeclReferenceExprSyntax.self)?.baseName.text == entityVariable {
+                queryParts.append("\\(\(typeName).keyPathToColumnName(for: \\.\(memberAccess.declName.baseName.text)))");
                 lastMember = memberAccess;
             } else if let operation = element.as(BinaryOperatorExprSyntax.self) {
                 if isCoalesce {
                     queryParts.append(")")
                     isCoalesce = false;
                 }
-                switch operation.operatorToken.text {
+                switch operation.operator.text {
                 case "==":
                     queryParts.append("=")
                 case "<", "<=", ">=", ">":
-                    queryParts.append(operation.operatorToken.text);
+                    queryParts.append(operation.operator.text);
                 case "!=":
                     queryParts.append("<>")
                 case "&&":
@@ -172,7 +172,7 @@ public struct QueryMacro: ExpressionMacro {
                     queryParts.append("COALESCE(");
                     queryParts.append(member + ",");
                 default:
-                    context.diagnose(.init(node: Syntax(operation), message: QueryMacroError.unsupportedOperator(operation.operatorToken.text).message, highlights: [Syntax(operation)]));
+                    context.diagnose(.init(node: Syntax(operation), message: QueryMacroError.unsupportedOperator(operation.operator.text).message, highlights: [Syntax(operation)]));
                 }
             } else if let tuple = element.as(TupleExprSyntax.self) {
                 queryParts.append("(")
@@ -191,7 +191,7 @@ public struct QueryMacro: ExpressionMacro {
                     queryParts.append("is not null");
                 } else {
                     queryParts.append("?")
-                    params.append(sqlValue(typeName: typeName, fieldName: lastMember!.name.text, exprSyntax: element));
+                    params.append(sqlValue(typeName: typeName, fieldName: lastMember!.declName.baseName.text, exprSyntax: element));
                 }
             }
         }

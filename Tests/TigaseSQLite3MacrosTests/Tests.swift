@@ -32,7 +32,7 @@ final class EntityMacroTests: XCTestCase {
     func test() {
         let source: SourceFileSyntax =
             """
-            @EntityMacro
+            @EntityMacro(columnName: .snakeCase)
             final class Test {
             
                 var debugDescription: String {
@@ -44,7 +44,7 @@ final class EntityMacroTests: XCTestCase {
                 let id: Int;
                 @Column
                 var name: String = "";
-                @Column("my_data")
+                @Column
                 var myData: String?;
                 @Relation("testId","test_id")
                 var attachments: [String] = ["test"];
@@ -64,7 +64,7 @@ final class EntityMacroTests: XCTestCase {
         
         let context = BasicMacroExpansionContext(sourceFiles: [source: file]);
         let transformed = source.expand(macros: ["EntityMacro":EntityMacro.self,"Column": ColumnMacro.self], in: context);
-        print("transformed:\n\(transformed.debugDescription)")
+        print("transformed:\n\(transformed.description)")
         //precondition(transformed.description == "");
     }
     

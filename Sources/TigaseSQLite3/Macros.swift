@@ -21,10 +21,12 @@
 //
 
 import Foundation
+import TigaseSQLite3Macros
 
-@attached(conformance)
-@attached(member, names: named(`init`), named(`fields`), named(`FieldTypes`), named(`loadRelations`), named(`relationTables`), named(`insert`), named(`delete`))
-public macro Entity() = #externalMacro(module: "TigaseSQLite3Macros", type: "EntityMacro")
+@attached(extension)
+@attached(member, names: arbitrary)
+//@attached(member, names: named(`init`), named(`fields`), named(`FieldTypes`), named(`loadRelations`), named(`relationTables`), named(`insert`), named(`delete`))
+public macro Entity(columnNames: ColumnNameFormat = .snakeCase) = #externalMacro(module: "TigaseSQLite3Macros", type: "EntityMacro")
 @attached(peer)
 public macro Column(_: String? = nil) = #externalMacro(module: "TigaseSQLite3Macros", type: "ColumnMacro")
 @attached(peer)
@@ -39,3 +41,8 @@ public macro Update<T: SQLCodable>(_: (T)->Void) -> [ModelUpdateExpression<T>] =
 
 @freestanding(expression)
 public macro Query<T:SQLCodable>(_: (T)->Bool) -> ModelQueryExpression<T> = #externalMacro(module: "TigaseSQLite3Macros", type: "QueryMacro")
+
+public enum ColumnNameFormat {
+    case camelCase
+    case snakeCase
+}

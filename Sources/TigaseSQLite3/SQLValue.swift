@@ -50,6 +50,8 @@ public enum SQLValue: CustomStringConvertible, Equatable {
         guard let value else { return .null }
         
         switch value {
+        case let v as Bool:
+            return .integer(v ? 1 : 0);
         case let v as Int:
             return .integer(v)
         case let v as Double:
@@ -75,6 +77,8 @@ public enum SQLValue: CustomStringConvertible, Equatable {
         guard let value else { return .null }
         
         switch value {
+        case let v as Bool:
+            return .integer(v ? 1 : 0);
         case let v as Int:
             return .integer(v)
         case let v as Double:
@@ -98,6 +102,9 @@ public enum SQLValue: CustomStringConvertible, Equatable {
     
     public func value<V: Decodable>() throws -> V? {
         switch V.self {
+        case is Bool.Type:
+            guard let value = self.int else { return nil }
+            return (value != 0 ? true : false) as? V;
         case is Int.Type:
             return self.int as? V;
         case is Double.Type:

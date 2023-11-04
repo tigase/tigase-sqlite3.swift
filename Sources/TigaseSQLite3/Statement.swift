@@ -209,3 +209,30 @@ extension Row {
     }
     
 }
+
+extension Row {
+    
+    public func string(for key: String) -> String? {
+        return self[key]?.string;
+    }
+        
+    public func int(for key: String) -> Int? {
+        return self[key]?.int;
+    }
+    
+    public func bool(for key: String) -> Bool? {
+        return try? self[key]?.value();
+    }
+
+    public func object<V: Codable>(for key: String) -> V? {
+        return try? self[key]?.value();
+    }
+    
+    public func data(for key: String) -> Data? {
+        return try? self[key]?.value();
+    }
+
+    public func date(for key: String) -> Date? {
+        return try? self[key]?.value();
+    }
+}

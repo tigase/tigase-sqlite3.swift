@@ -20,6 +20,7 @@
 //
 //
 
+import Foundation
 import SwiftSyntax
 import SwiftSyntaxMacros
 import SwiftSyntaxBuilder
@@ -70,23 +71,18 @@ public enum EntityMacroError: String, CustomStringConvertible, Error {
     }
 }
 
-public struct EntityMacro: MemberMacro, ConformanceMacro {
+public struct EntityMacro: MemberMacro, ExtensionMacro {
     
-    public static func expansion(
-      of node: AttributeSyntax,
-      providingConformancesOf declaration: some DeclGroupSyntax,
-      in context: some MacroExpansionContext
-    ) throws -> [(TypeSyntax, GenericWhereClauseSyntax?)] {
-        guard let classDecl = declaration as? ClassDeclSyntax, classDecl.modifiers?.contains(where: { $0.name.text == "final" }) ?? false else {
+    public static func expansion(of node: AttributeSyntax, attachedTo declaration: some DeclGroupSyntax, providingExtensionsOf type: some TypeSyntaxProtocol, conformingTo protocols: [TypeSyntax], in context: some MacroExpansionContext) throws -> [ExtensionDeclSyntax] {
+        guard let classDecl = declaration as? ClassDeclSyntax, classDecl.modifiers.contains(where: { $0.name.text == "final" }) else {
             throw EntityMacroError.onlyApplicableToFinalClass;
         }
-        
-        if !(classDecl.inheritanceClause?.inheritedTypeCollection.contains(where: { $0.as(InheritedTypeSyntax.self)?.typeName.as(SimpleTypeIdentifierSyntax.self)?.name.text == "SQLCodable" }) ?? false) {
-            return [("SQLCodable", nil)];
+        if !(classDecl.inheritanceClause?.inheritedTypes.contains(where: { $0.as(InheritedTypeSyntax.self)?.type.as(IdentifierTypeSyntax.self)?.name.text == "SQLCodable" }) ?? false) {
+            return [try ExtensionDeclSyntax("extension \(type): SQLCodable {}")]
         }
         return [];
-    }    
-    
+    }
+        
     public struct RelationDef {
         let propertyName: String;
         let type: TypeSyntax;
@@ -101,18 +97,19 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
         providingMembersOf declaration: Declaration,
         in context: Context
       ) throws -> [DeclSyntax] {
-          //declaration.memberBlock.members.
-          guard let classDecl = declaration as? ClassDeclSyntax, classDecl.modifiers?.contains(where: { $0.name.text == "final" }) ?? false else {
+          print(node.debugDescription);
+          let columnNameFormat = ColumnNameFormat(rawValue: node.arguments?.as(LabeledExprListSyntax.self)?.first(where: { $0.label?.text == "columnNames" })?.expression.as(MemberAccessExprSyntax.self)?.declName.baseName.text ?? "") ?? .snakeCase;
+          guard let classDecl = declaration as? ClassDeclSyntax, classDecl.modifiers.contains(where: { $0.name.text == "final" }) else {
               throw EntityMacroError.onlyApplicableToFinalClass;
           }
                     
-          let typeName = classDecl.identifier.text;
+          let typeName = classDecl.name.text;
           let relations = entityFields(declaration: classDecl).compactMap({ fieldDecl -> RelationDef? in
               guard let propertyName = fieldDecl.name else {
                   return nil;
               }
 
-              guard let type = fieldDecl.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self)?.elementType.as(TypeSyntax.self) else {
+              guard let type = fieldDecl.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self)?.element.as(TypeSyntax.self) else {
                   return nil;
               }
 
@@ -126,7 +123,7 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
           let results: [[DeclSyntaxProtocol]] = [
             try initMethod(declaration: classDecl, context: context),
             try initFromModel(declaration: classDecl, typeName: typeName),
-            staticFieldsField(declaration: classDecl, typeName: typeName),
+            staticFieldsField(declaration: classDecl, typeName: typeName, columnNameFormat: columnNameFormat),
             try staticFieldTypes(declaration: classDecl, typeName: typeName),
             staticRelationTablesField(declaration: classDecl, relations: relations),
             try staticLoadRelationsMethod(declaration: classDecl, typeName: typeName, relations: relations),
@@ -145,18 +142,18 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
         guard !hasMethod(declaration: declaration, name: "loadRelations", parameters: ["from database", "for items"], isStatic: true) else {
             return [];
         }
-        return [try FunctionDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), identifier: TokenSyntax(stringLiteral: "loadRelations"), signature: FunctionSignatureSyntax(input: ParameterClauseSyntax() {
+        return [try FunctionDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), name: TokenSyntax(stringLiteral: "loadRelations"), signature: FunctionSignatureSyntax(parameterClause: FunctionParameterClauseSyntax() {
             FunctionParameterSyntax(firstName: "from database", colon: ":", type: TypeSyntax(stringLiteral: "DatabaseReader"))
             FunctionParameterSyntax(firstName: "for items", colon: ":", type: TypeSyntax(stringLiteral: "[\(typeName)]"))
         }, effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsSpecifier: TokenSyntax(stringLiteral: "throws"))), bodyBuilder: {
             for relation in relations {
-                VariableDeclSyntax(bindingKeyword: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
-                    PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "\(raw: relation.propertyName)"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(elementType: relation.type)), initializer: InitializerClauseSyntax(value: ExprSyntax("try database.select(where: .literal(\"\\(\(raw: relation.type).keyPathToColumnName(for: \\.\(raw: relation.externalJoinProperty))) IN (\\(items.map(\\.id).map({ $0.description }).joined(separator: \", \")))\"))")))
+                VariableDeclSyntax(bindingSpecifier: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
+                    PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "\(raw: relation.propertyName)"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(element: relation.type)), initializer: InitializerClauseSyntax(value: ExprSyntax("try database.select(where: .literal(\"\\(\(raw: relation.type).keyPathToColumnName(for: \\.\(raw: relation.externalJoinProperty))) IN (\\(items.map(\\.id).map({ $0.description }).joined(separator: \", \")))\"))")))
                 }))
-                VariableDeclSyntax(bindingKeyword: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
+                VariableDeclSyntax(bindingSpecifier: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
                     PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "\(raw: relation.propertyName)ById"), initializer: InitializerClauseSyntax(value: ExprSyntax("Dictionary(grouping: \(raw: relation.propertyName), by: { $0.\(raw: relation.externalJoinProperty) })")))
                 }));
-                try ForInStmtSyntax("for item in items", bodyBuilder: {
+                try ForStmtSyntax("for item in items", bodyBuilder: {
                     ExprSyntax("item.\(raw: relation.propertyName) = \(raw: relation.propertyName)ById[item.id] ?? []")
                 })
             }
@@ -168,8 +165,8 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
             return [];
         }
         let relationTables = relations.map({ ExprSyntax("\($0.type).tableName") }).map({ ArrayElementSyntax(expression: $0) })
-        return [VariableDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic),bindingKeyword: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
-            PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "relationTables"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(elementType: TypeSyntax(stringLiteral: "String"))), initializer: InitializerClauseSyntax(value: ArrayExprSyntax(elements: ArrayElementListSyntax(relationTables))))
+        return [VariableDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic),bindingSpecifier: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
+            PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "relationTables"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(element: TypeSyntax(stringLiteral: "String"))), initializer: InitializerClauseSyntax(value: ArrayExprSyntax(elements: ArrayElementListSyntax(relationTables))))
         }))]
     }
     
@@ -182,11 +179,11 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
             .filter({ !$0.hasMacro(.Relation) })
             .compactMap({ $0.name })
             .map({field in ".value(\\.\(field), value: self.\(field))" })
-        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: false, isPublic: declaration.isPublic), identifier: TokenSyntax(stringLiteral: "insert"), signature: FunctionSignatureSyntax(input: ParameterClauseSyntax() {
+        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: false, isPublic: declaration.isPublic), name: TokenSyntax(stringLiteral: "insert"), signature: FunctionSignatureSyntax(parameterClause: FunctionParameterClauseSyntax() {
             FunctionParameterSyntax(firstName: "into database", colon: ":", type: TypeSyntax(stringLiteral: "DatabaseWriter"))
         }, effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsSpecifier: TokenSyntax(stringLiteral: "throws"))), bodyBuilder: {
-            VariableDeclSyntax(bindingKeyword: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
-                PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "params"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(elementType: TypeSyntax(stringLiteral: "ModelInsertExpression<\(typeName)>"))), initializer: InitializerClauseSyntax(value: ExprSyntax("[\(raw: paramsList.joined(separator: ","))]")))
+            VariableDeclSyntax(bindingSpecifier: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
+                PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "params"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(element: TypeSyntax(stringLiteral: "ModelInsertExpression<\(typeName)>"))), initializer: InitializerClauseSyntax(value: ExprSyntax("[\(raw: paramsList.joined(separator: ","))]")))
             }));
             ExprSyntax("try database.insert(\(raw: typeName).self, values: params)")
         })];
@@ -211,7 +208,7 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
                 return "\(field.0): \(field.1) = nil"
             } else if field.1.is(ArrayTypeSyntax.self) {
                 return "\(field.0): \(field.1) = []";
-            } else if field.1.as(SimpleTypeIdentifierSyntax.self) != nil {
+            } else if field.1.as(IdentifierTypeSyntax.self) != nil {
                 if (field.3) {
                     return "\(field.0): \(field.1) = -1"
                 } else {
@@ -222,7 +219,8 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
                 return nil;
             }
         });
-        return [try InitializerDeclSyntax("\(declaration.isPublic ? "public " : "")init(\(raw: params.joined(separator: ", ")))") {
+        let visibility = declaration.isPublic ? "public " : "";
+        return [try InitializerDeclSyntax("\(raw: visibility)init(\(raw: params.joined(separator: ", ")))") {
             CodeBlockItemListSyntax {
                 for param in initFields {
                     ExprSyntax("self.\(raw: param.0) = \(raw: param.0);")
@@ -255,7 +253,7 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
                 return "\(field.0): \(field.1) = nil"
             } else if field.1.is(ArrayTypeSyntax.self) {
                 return "\(field.0): \(field.1) = []";
-            } else if field.1.as(SimpleTypeIdentifierSyntax.self) != nil {
+            } else if field.1.as(IdentifierTypeSyntax.self) != nil {
                 return "\(field.0): \(field.1)"
             } else {
                 context.diagnose(.init(node: Syntax(field.3), message: EntityMacroError.unsupportedFieldType.message, highlights: [Syntax(field.3)]))
@@ -264,14 +262,14 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
         });
         let paramsList = insertFields.map({ $0.0 }).map({field in ".value(\\.\(field), value: \(field))" });
         
-        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), identifier: TokenSyntax(stringLiteral: "insert"), signature: FunctionSignatureSyntax(input: ParameterClauseSyntax(parameterList: FunctionParameterListSyntax() {
+        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), name: TokenSyntax(stringLiteral: "insert"), signature: FunctionSignatureSyntax(parameterClause: FunctionParameterClauseSyntax(parameters: FunctionParameterListSyntax() {
             FunctionParameterSyntax(stringLiteral: "into database: DatabaseWriter")
             for param in params {
                 FunctionParameterSyntax(stringLiteral: param)
             }
         }),effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsSpecifier: TokenSyntax(stringLiteral: "throws")))) {
             CodeBlockItemListSyntax {
-                ExprSyntax("try database.insert(\(raw: declaration.identifier.text).self, values: [\(raw: paramsList.joined(separator: ", "))])")
+                ExprSyntax("try database.insert(\(raw: declaration.name.text).self, values: [\(raw: paramsList.joined(separator: ", "))])")
             }
         }];
     }
@@ -299,14 +297,14 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
         });
 
         let paramsList = primaryKeys.map({ $0.0 }).map({field in ".equals(\\.\(field), value: \(field))" });
-        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), identifier: TokenSyntax(stringLiteral: "delete"), signature: FunctionSignatureSyntax(input: ParameterClauseSyntax(parameterList: FunctionParameterListSyntax() {
+        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), name: TokenSyntax(stringLiteral: "delete"), signature: FunctionSignatureSyntax(parameterClause: FunctionParameterClauseSyntax(parameters: FunctionParameterListSyntax() {
             FunctionParameterSyntax(stringLiteral: "from database: DatabaseWriter")
             for param in params {
                 FunctionParameterSyntax(stringLiteral: param)
             }
         }), effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsSpecifier: TokenSyntax(stringLiteral: "throws")))) {
             CodeBlockItemListSyntax {
-                ExprSyntax("try database.delete(\(raw: declaration.identifier.text).self, where: .and(\(raw: paramsList.joined(separator: ", "))))")
+                ExprSyntax("try database.delete(\(raw: declaration.name.text).self, where: .and(\(raw: paramsList.joined(separator: ", "))))")
             }
         }]
     }
@@ -330,11 +328,11 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
         })
         
         let paramsList = primaryKeys.map({ $0.0 }).map({field in ".equals(\\.\(field), value: self.\(field))" });
-        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: false, isPublic: declaration.isPublic), identifier: TokenSyntax(stringLiteral: "delete"), signature: FunctionSignatureSyntax(input: ParameterClauseSyntax(parameterList: FunctionParameterListSyntax() {
+        return [FunctionDeclSyntax(modifiers: modifiers(isStatic: false, isPublic: declaration.isPublic), name: TokenSyntax(stringLiteral: "delete"), signature: FunctionSignatureSyntax(parameterClause: FunctionParameterClauseSyntax(parameters: FunctionParameterListSyntax() {
             FunctionParameterSyntax(stringLiteral: "from database: DatabaseWriter")
         }), effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsSpecifier: TokenSyntax(stringLiteral: "throws")))) {
             CodeBlockItemListSyntax {
-                ExprSyntax("try database.delete(\(raw: declaration.identifier.text).self, where: .and(\(raw: paramsList.joined(separator: ", "))))")
+                ExprSyntax("try database.delete(\(raw: declaration.name.text).self, where: .and(\(raw: paramsList.joined(separator: ", "))))")
             }
         }]
     }
@@ -342,7 +340,7 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
     
     static func entityFields(declaration: ClassDeclSyntax) -> [VariableDeclSyntax] {
         return declaration.memberBlock.members.compactMap({ member -> VariableDeclSyntax? in
-            guard let fieldDecl = member.decl.as(VariableDeclSyntax.self), !fieldDecl.isStatic, fieldDecl.bindings.first?.accessor == nil else {
+            guard let fieldDecl = member.decl.as(VariableDeclSyntax.self), !fieldDecl.isStatic, fieldDecl.bindings.first?.accessorBlock == nil else {
                 return nil;
             }
             return fieldDecl;
@@ -364,11 +362,11 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
                 return false;
             }
             
-            guard funcDecl.identifier.text == name else {
+            guard funcDecl.name.text == name else {
                 return false;
             }
             
-            return funcDecl.signature.input.parameterList.map({ $0.firstName.text }) == parameters;
+            return funcDecl.signature.parameterClause.parameters.map({ $0.firstName.text }) == parameters;
         })
     }
     
@@ -378,11 +376,11 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
                 return false;
             }
                         
-            return funcDecl.signature.input.parameterList.map({ $0.firstName.text }) == parameters;
+            return funcDecl.signature.parameterClause.parameters.map({ $0.firstName.text }) == parameters;
         })
     }
 
-    static func modifiers(isStatic: Bool, isPublic: Bool) -> ModifierListSyntax? {
+    static func modifiers(isStatic: Bool, isPublic: Bool) -> DeclModifierListSyntax {
         var modifiers: [String] = [];
         if isPublic {
             modifiers.append("public");
@@ -391,9 +389,9 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
             modifiers.append("static");
         }
         guard !modifiers.isEmpty else {
-            return nil;
+            return DeclModifierListSyntax();
         }
-        return ModifierListSyntax() {
+        return DeclModifierListSyntax() {
             for modifier in modifiers {
                 DeclModifierSyntax(name: TokenSyntax(stringLiteral: modifier))
             }
@@ -409,7 +407,9 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
             .filter({ !$0.hasMacro(.Relation) })
             .compactMap({ $0.name })
         
-        return [try InitializerDeclSyntax("\(declaration.isPublic ? "public " : "")init(model: ModelRow<\(raw: typeName)>)") {
+        let visibility = declaration.isPublic ? "public " : "";
+        
+        return [try InitializerDeclSyntax("\(raw: visibility)init(model: ModelRow<\(raw: typeName)>)") {
             CodeBlockItemListSyntax {
                 for name in initFieldsNames {
                     ExprSyntax("self.\(raw: name) = model[\\.\(raw: name)];")
@@ -420,7 +420,7 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
     
     static func staticFieldTypes(declaration: ClassDeclSyntax, typeName: String) throws -> [StructDeclSyntax] {
         let fieldsExpressions = declaration.memberBlock.members.compactMap({ member -> VariableDeclSyntax? in
-            guard let fieldDecl = member.decl.as(VariableDeclSyntax.self), !fieldDecl.isStatic, fieldDecl.bindings.first?.accessor == nil, let propertyName = fieldDecl.name else {
+            guard let fieldDecl = member.decl.as(VariableDeclSyntax.self), !fieldDecl.isStatic, fieldDecl.bindings.first?.accessorBlock == nil, let propertyName = fieldDecl.name else {
                 return nil;
             }
             
@@ -429,55 +429,69 @@ public struct EntityMacro: MemberMacro, ConformanceMacro {
             }
                         
             let valueExpr = ExprSyntax("\(raw: fieldType).self");
-            return VariableDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), bindingKeyword: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
+            return VariableDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), bindingSpecifier: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
                 PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "\(raw: propertyName)"), initializer: InitializerClauseSyntax(value: valueExpr))
             }))
         });
         
-        return [StructDeclSyntax(identifier: "FieldTypes", memberBlock: MemberDeclBlockSyntax(membersBuilder: {
+        return [StructDeclSyntax(name: "FieldTypes", memberBlock: MemberBlockSyntax(membersBuilder: {
             for field in fieldsExpressions {
                 field;
             }
         }))]
     }
     
-    static func staticFieldsField(declaration: ClassDeclSyntax, typeName: String) -> [VariableDeclSyntax] {
+    static func staticFieldsField(declaration: ClassDeclSyntax, typeName: String, columnNameFormat: ColumnNameFormat) -> [VariableDeclSyntax] {
         guard !hasField(declaration: declaration, name: "fields", isStatic: true) else {
             return [];
         }
         let fieldsExpressions = declaration.memberBlock.members.compactMap({ member -> ExprSyntax? in
-            guard let fieldDecl = member.decl.as(VariableDeclSyntax.self), !fieldDecl.isStatic, fieldDecl.bindings.first?.accessor == nil, let propertyName = fieldDecl.name else {
+            guard let fieldDecl = member.decl.as(VariableDeclSyntax.self), !fieldDecl.isStatic, fieldDecl.bindings.first?.accessorBlock == nil, let propertyName = fieldDecl.name else {
                 return nil;
             }
             if let columnName = fieldDecl.sqlColumnName() {
                 return ExprSyntax(".init(\\.\(raw: propertyName), column: \(raw: columnName))");
             } else {
-                return ExprSyntax(".init(\\.\(raw: propertyName), column: \"\(raw: propertyName)\")");
+                switch columnNameFormat {
+                case .camelCase:
+                    return ExprSyntax(".init(\\.\(raw: propertyName), column: \"\(raw: propertyName)\")");
+                case .snakeCase:
+                    let regex = try! NSRegularExpression(pattern: "([a-z0-9])([A-Z])", options: []);
+                    let range = NSRange(location: 0, length: propertyName.count);
+                    let columnName = regex.stringByReplacingMatches(in: propertyName, options: [], range: range, withTemplate: "$1_$2").lowercased();
+                    print("formatted name: \(columnName)")
+                    return ExprSyntax(".init(\\.\(raw: propertyName), column: \"\(raw: columnName)\")");
+                }
             }
         });
         
         let valueExpr = ExprSyntax("[\(raw: fieldsExpressions.map({ $0.description }).joined(separator: ", "))]")
         
-        return [VariableDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), bindingKeyword: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
-            PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "fields"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(elementType: TypeSyntax(stringLiteral: "SQLField<\(typeName)>"))), initializer: InitializerClauseSyntax(value: valueExpr))
+        return [VariableDeclSyntax(modifiers: modifiers(isStatic: true, isPublic: declaration.isPublic), bindingSpecifier: "let", bindings: PatternBindingListSyntax(itemsBuilder: {
+            PatternBindingSyntax(pattern: IdentifierPatternSyntax(identifier: "fields"), typeAnnotation: TypeAnnotationSyntax(type: ArrayTypeSyntax(element: TypeSyntax(stringLiteral: "SQLField<\(typeName)>"))), initializer: InitializerClauseSyntax(value: valueExpr))
         }))]
     }
     
 }
 
+public enum ColumnNameFormat: String {
+    case camelCase
+    case snakeCase
+}
+
 protocol ModifierAwareProtocol {
 
-    var modifiers: ModifierListSyntax? { get }
+    var modifiers: DeclModifierListSyntax { get }
 }
 
 extension ModifierAwareProtocol {
     
     var isPublic: Bool {
-        modifiers?.contains(where: { $0.name.text == "public" }) ?? false
+        modifiers.contains(where: { $0.name.text == "public" })
     }
     
     var isStatic: Bool {
-        modifiers?.contains(where: { $0.name.text == "static" }) ?? false
+        modifiers.contains(where: { $0.name.text == "static" })
     }
     
 }
@@ -495,14 +509,14 @@ extension VariableDeclSyntax {
     }
     
     func hasMacro(_ macro: Macros) -> Bool {
-        return attributes?.contains(where: { el in
-            return el.as(AttributeSyntax.self)?.attributeName.as(SimpleTypeIdentifierSyntax.self)?.description == macro.rawValue;
-        }) ?? false;
+        return attributes.contains(where: { el in
+            return el.as(AttributeSyntax.self)?.attributeName.as(IdentifierTypeSyntax.self)?.description == macro.rawValue;
+        });
     }
     
     func macro(_ macro: Macros) -> AttributeSyntax? {
-        return attributes?.first(where: { el in
-            return el.as(AttributeSyntax.self)?.attributeName.as(SimpleTypeIdentifierSyntax.self)?.description == macro.rawValue;
+        return attributes.first(where: { el in
+            return el.as(AttributeSyntax.self)?.attributeName.as(IdentifierTypeSyntax.self)?.description == macro.rawValue;
         })?.as(AttributeSyntax.self);
     }
     
@@ -511,7 +525,7 @@ extension VariableDeclSyntax {
             return nil;
         }
                 
-        guard let sqlColumnName = columnMacro.argument?.as(TupleExprElementListSyntax.self)?.first?.expression else {
+        guard let sqlColumnName = columnMacro.arguments?.as(LabeledExprListSyntax.self)?.first?.expression else {
             return nil;
         }
         return sqlColumnName.description;
@@ -522,7 +536,7 @@ extension VariableDeclSyntax {
             return nil;
         }
                 
-        guard let fieldName = columnMacro.argument?.as(TupleExprElementListSyntax.self)?.first?.expression.as(StringLiteralExprSyntax.self)?.segments else {
+        guard let fieldName = columnMacro.arguments?.as(LabeledExprListSyntax.self)?.first?.expression.as(StringLiteralExprSyntax.self)?.segments else {
             return nil;
         }
         return fieldName.description;

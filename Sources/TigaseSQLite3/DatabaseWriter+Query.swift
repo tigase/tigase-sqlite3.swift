@@ -27,6 +27,10 @@ extension DatabaseWriter {
         try delete(query.statement, cached: cached, params: params);
     }
 
+//    public func delete(query: Query, cached: Bool = true, params: [String: SQLValue]) throws {
+//        try delete(query.statement, cached: cached, params: params);
+//    }
+//    
     public func delete(query: Query, cached: Bool = true, params: [Encodable?] = []) throws {
         try delete(query.statement, cached: cached, params: params);
     }
@@ -35,6 +39,10 @@ extension DatabaseWriter {
         try insert(query.statement, cached: cached, params: params);
     }
 
+//    public func insert(query: Query, cached: Bool = true, params: [String: SQLValue]) throws {
+//        try insert(query.statement, cached: cached, params: params);
+//    }
+
     public func insert(query: Query, cached: Bool = true, params: [Encodable?] = []) throws {
         try insert(query.statement, cached: cached, params: params);
     }
@@ -42,6 +50,10 @@ extension DatabaseWriter {
     public func update(query: Query, cached: Bool = true, params: [String: Encodable?]) throws {
         try update(query.statement, cached: cached, params: params);
     }
+
+//    public func update(query: Query, cached: Bool = true, params: [String: SQLValue]) throws {
+//        try update(query.statement, cached: cached, params: params);
+//    }
 
     public func update(query: Query, cached: Bool = true, params: [Encodable?] = []) throws {
         try update(query.statement, cached: cached, params: params);

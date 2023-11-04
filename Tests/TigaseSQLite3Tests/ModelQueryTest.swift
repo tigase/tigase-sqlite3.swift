@@ -107,7 +107,7 @@ final class Test1: SQLCodable, CustomDebugStringConvertible {
     var attachments: [TestAttachment] = [];
 }
 
-@Entity
+@Entity(columnNames: .snakeCase)
 public final class TestAttachment: SQLCodable, CustomDebugStringConvertible {
     
     public static let tableName = "test_attachments";
@@ -125,7 +125,7 @@ public final class TestAttachment: SQLCodable, CustomDebugStringConvertible {
     @PrimaryKey
     @Column
     let id: Int;
-    @Column("test_id")
+    @Column
     var testId: Int;
     @Column
     var path: URL?;
@@ -150,7 +150,7 @@ class ModelQueryTest: XCTestCase {
         try databasePool?.writer({ database in
             try? database.execute("drop table test_1");
             try? database.execute("drop table test_attachments");
-            try database.execute("create table test_1(id integer primary key asc, name text, details text, e1 int, options text, list text, createdAt int, data blob)");
+            try database.execute("create table test_1(id integer primary key asc, name text, details text, e1 int, options text, list text, created_at int, data blob)");
             try database.execute("create table test_attachments(id integer primary key asc, test_id int not null, path text)");
         })
         // Put setup code here. This method is called before the invocation of each test method in the class.

@@ -89,11 +89,11 @@ public struct UpdateMacro: ExpressionMacro {
             throw UpdateMacroError.missingTrailigClosure;
         }
                     
-        guard let typeName = macroExpr.genericArguments?.arguments.first?.argumentType.as(SimpleTypeIdentifierSyntax.self)?.name.text else {
+        guard let typeName = macroExpr.genericArgumentClause?.arguments.first?.argument.as(IdentifierTypeSyntax.self)?.name.text else {
             throw UpdateMacroError.missingGenericTypeParameter;
         }
         
-        let entityVariable = closure.signature?.input?.as(ClosureParamListSyntax.self)?.first?.name.text ?? "$0";        
+        let entityVariable = closure.signature?.parameterClause?.as(ClosureShorthandParameterListSyntax.self)?.first?.name.text ?? "$0";
         let statements = closure.statements;
         var queryParts: [String] = [];
         var params: [ExprSyntax] = [];
@@ -104,14 +104,14 @@ public struct UpdateMacro: ExpressionMacro {
                 continue;
             }
             
-            guard let assignMemberExpr = elements.removeFirst().as(MemberAccessExprSyntax.self), assignMemberExpr.base?.as(IdentifierExprSyntax.self)?.identifier.text == entityVariable else {
+            guard let assignMemberExpr = elements.removeFirst().as(MemberAccessExprSyntax.self), assignMemberExpr.base?.as(DeclReferenceExprSyntax.self)?.baseName.text == entityVariable else {
                 context.diagnose(.init(node: Syntax(statement), message: UpdateMacroError.onlyAssignmentsAreAllowed.message, highlights: [Syntax(statement)]));
                 continue;
             }
             
-            let fieldName = assignMemberExpr.name.text;
+            let fieldName = assignMemberExpr.declName.baseName.text;
             
-            guard let assignOperation = elements.removeFirst().as(AssignmentExprSyntax.self), assignOperation.assignToken.text == "=" else {
+            guard let assignOperation = elements.removeFirst().as(AssignmentExprSyntax.self), assignOperation.equal.text == "=" else {
                 context.diagnose(.init(node: Syntax(statement), message: UpdateMacroError.onlyAssignmentsAreAllowed.message, highlights: [Syntax(statement)]));
                 continue;
             }
@@ -123,7 +123,7 @@ public struct UpdateMacro: ExpressionMacro {
             
             elements = elements.map({ expr in
                 if let member = expr.as(MemberAccessExprSyntax.self), member.base == nil {
-                    return member.with(\.base, ExprSyntax("\(raw: typeName).FieldTypes.\(raw: assignMemberExpr.name.text)")).as(ExprSyntax.self)!;
+                    return member.with(\.base, ExprSyntax("\(raw: typeName).FieldTypes.\(raw: assignMemberExpr.declName.baseName.text)")).as(ExprSyntax.self)!;
                 } else {
                     return expr;
                 }
@@ -139,7 +139,7 @@ public struct UpdateMacro: ExpressionMacro {
         
     private static func getExpressions(item: SyntaxProtocol, context: MacroExpansionContext) throws -> [ExprSyntax] {
         if let infix = item.as(InfixOperatorExprSyntax.self) {
-            return [infix.leftOperand, infix.operatorOperand, infix.rightOperand].compactMap({ $0 });
+            return [infix.leftOperand, infix.operator, infix.rightOperand].compactMap({ $0 });
         }
         if let sequenceExprSyntax = item.as(SequenceExprSyntax.self) {
             return sequenceExprSyntax.elements.map({ $0 });
