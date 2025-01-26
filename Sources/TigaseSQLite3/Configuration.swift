@@ -21,7 +21,7 @@
 
 import Foundation
 
-public struct Configuration {
+public struct Configuration: Sendable {
     
     /// Path to the database file
     public let path: String;

@@ -23,13 +23,13 @@ import Foundation
 import CSQLite
 import Combine
 
-public class Database: DatabaseReaderInternal, DatabaseWriterInternal {
+public final class Database: DatabaseReaderInternal, DatabaseWriterInternal {
  
-    public struct Options: OptionSet {
+    public struct Options: OptionSet, Sendable {
         
         static let wal = Options(rawValue: 1 << 0)
         
-        public var rawValue: UInt;
+        public let rawValue: UInt;
 
         public init(rawValue: UInt) {
             self.rawValue = rawValue

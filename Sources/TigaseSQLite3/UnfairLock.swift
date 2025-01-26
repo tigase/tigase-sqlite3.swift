@@ -21,45 +21,81 @@
 //
 
 import Foundation
+import os
 
-public class UnfairLock {
+open class UnfairLock<State>: @unchecked Sendable {
     
-    private var lock_s = os_unfair_lock();
+    private let lockFn: () -> Void;
+    private let unlockFn: () -> Void;
+    private var state: State;
     
-    public init() {}
+    public init(state: State) {
+        self.state = state;
+        (lockFn, unlockFn) = createUnfairLock(initialState: state);
+    }
     
+    @discardableResult
+    public func with<R>(_ body: (inout State) -> R) -> R {
+        lockFn();
+        defer {
+            unlockFn();
+        }
+        return body(&state);
+    }
+
+    @discardableResult
+    public func with<R>(_ body: (inout State) throws -> R) rethrows -> R {
+        lockFn();
+        defer {
+            unlockFn();
+        }
+        return try body(&state);
+    }
+
+}
+
+extension UnfairLock where State == Void {
+    
+    public convenience init() {
+        self.init(state: ())
+    }
+
     public func lock() {
-        os_unfair_lock_lock(&lock_s);
+        lockFn()
     }
     
     public func unlock() {
-        os_unfair_lock_unlock(&lock_s);
+        unlockFn();
     }
     
     @discardableResult
-    public func with<T>(_ operation: ()->T) -> T {
+    public func with<T>(_ body: () -> T) -> T {
         lock();
         defer {
             unlock();
         }
-        return operation();
+        return body();
     }
-
+    
     @discardableResult
-    public func with<T>(_ operation: () throws -> T) rethrows -> T {
+    public func with<T>(_ body: () throws -> T) rethrows -> T {
         lock();
         defer {
             unlock();
         }
-        return try operation();
+        return try body();
     }
 
-    public func with(_ operation: ()->Void) {
-        lock();
-        defer {
-            unlock();
-        }
-        operation();
-    }
+}
 
+
+
+private func createUnfairLock<State>(initialState: State) -> (()->Void,()->Void) {
+    if #available(iOS 16.0, macOS 13.0, *) {
+        let lock = OSAllocatedUnfairLock();
+        return ( lock.lock, lock.unlock )
+    } else {
+        var lock = os_unfair_lock();
+        return ({ os_unfair_lock_lock(&lock) }, { os_unfair_lock_unlock(&lock) });
+    }
 }

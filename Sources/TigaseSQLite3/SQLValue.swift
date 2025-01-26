@@ -38,7 +38,7 @@ public protocol IntRawRepresentable {
     
 }
 
-public enum SQLValue: CustomStringConvertible, Equatable {
+public enum SQLValue: CustomStringConvertible, Equatable, Sendable {
     
     case null
     case integer(Int)

@@ -23,11 +23,11 @@ import Foundation
 import CSQLite
 import Combine
 
-public class DatabasePool {
+public final class DatabasePool: Sendable {
     
     public let configuration: Configuration;
-    private var writer: DatabaseWriter;
-    private var writerSemphore = DispatchSemaphore(value: 1);
+    private let writer: DatabaseWriter;
+    private let writerSemphore = DispatchSemaphore(value: 1);
     private let readers: Pool<DatabaseReader>;
     
     public var currentPoolSize: Int {
@@ -119,7 +119,7 @@ extension DatabasePool: DatabaseReaderInternal, DatabaseWriterInternal {
 
 public typealias PoolSupplier<T> = () throws -> T;
 
-public class Pool<T> {
+public final class Pool<T>: @unchecked Sendable {
     
     private let queue = DispatchQueue(label: "PoolQueue");
     

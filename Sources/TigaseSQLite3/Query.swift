@@ -21,7 +21,7 @@
 
 import Foundation
 
-public struct Query {
+public struct Query: Sendable {
     
     public let statement: String;
     

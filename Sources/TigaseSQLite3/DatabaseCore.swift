@@ -12,7 +12,7 @@ import SQLite3
 
 public typealias SQLConnection = OpaquePointer;
 
-final class DatabaseCore: DatabaseWriter {
+final class DatabaseCore: DatabaseWriter, @unchecked Sendable {
     
     private let logger = Logger(subsystem: "tigase.sqlite3", category: "DatabaseCore")
     

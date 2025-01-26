@@ -30,7 +30,7 @@ enum QueryMacroError: CustomStringConvertible, Error {
     case missingGenericTypeParameter
     case onlySingleStatementExpressionsSupported
     case unsupportedOperator(String)
-    case invalidParameter(Any)
+    case invalidParameter(String)
         
     public var description: String {
         switch self {
@@ -115,7 +115,7 @@ public struct QueryMacro: ExpressionMacro {
     private static func findClosureExpressionElements(item: SyntaxProtocol) throws -> [ExprSyntax] {
         if let returnStmtSyntax = item.as(ReturnStmtSyntax.self) {
             guard let expression = returnStmtSyntax.expression else {
-                throw QueryMacroError.invalidParameter(returnStmtSyntax);
+                throw QueryMacroError.invalidParameter(returnStmtSyntax.description);
             }
             return try findClosureExpressionElements(item: expression)
         }
@@ -133,7 +133,7 @@ public struct QueryMacro: ExpressionMacro {
             return sequenceExprSyntax.elements.map({ $0 });
         }
         
-        throw QueryMacroError.invalidParameter(item)
+        throw QueryMacroError.invalidParameter(item.description)
     }
     
     struct Comparision {
@@ -190,8 +190,11 @@ public struct QueryMacro: ExpressionMacro {
                     queryParts.removeLast();
                     queryParts.append("is not null");
                 } else {
+                    guard let lastMember  else {
+                        throw QueryMacroError.invalidParameter(element.description)
+                    }
                     queryParts.append("?")
-                    params.append(sqlValue(typeName: typeName, fieldName: lastMember!.declName.baseName.text, exprSyntax: element));
+                    params.append(sqlValue(typeName: typeName, fieldName: lastMember.declName.baseName.text, exprSyntax: element));
                 }
             }
         }

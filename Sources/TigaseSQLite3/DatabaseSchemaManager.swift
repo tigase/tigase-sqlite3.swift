@@ -34,7 +34,7 @@ public class DatabaseSchemaManager {
     
 }
 
-public protocol DatabaseSchemaMigrator {
+public protocol DatabaseSchemaMigrator: Sendable {
     
     var expectedVersion: Int { get }
     

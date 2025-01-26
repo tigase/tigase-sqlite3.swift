@@ -44,22 +44,22 @@ extension SQLCodable {
     
 }
 
-public struct SQLField<T: SQLCodable> {
+public struct SQLField<T: SQLCodable>: Sendable {
     
-    public let keyPath: PartialKeyPath<T>;
+    public let keyPath: PartialKeyPath<T> & Sendable;
     public let column: String;
 
-    public init<V: Decodable>(_ keyPath: KeyPath<T,V?>, column: String) {
+    public init<V: Decodable>(_ keyPath: KeyPath<T,V?> & Sendable, column: String) {
         self.keyPath = keyPath;
         self.column = column;
     }
     
-    public init<V: Decodable>(_ keyPath: KeyPath<T,V>, column: String) {
+    public init<V: Decodable>(_ keyPath: KeyPath<T,V> & Sendable, column: String) {
         self.keyPath = keyPath;
         self.column = column;
     }
     
-    public static func field<V: Decodable>(_ keyPath: WritableKeyPath<T,V>, column: String) -> SQLField<T> {
+    public static func field<V: Decodable>(_ keyPath: WritableKeyPath<T,V> & Sendable, column: String) -> SQLField<T> {
         return .init(keyPath, column: column);
     }
 }

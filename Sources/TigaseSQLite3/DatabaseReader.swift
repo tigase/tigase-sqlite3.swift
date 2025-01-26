@@ -21,7 +21,7 @@
 
 import Foundation
 
-public protocol DatabaseReader: AnyObject {
+public protocol DatabaseReader: AnyObject, Sendable {
 
     func select(_ query: String, cached: Bool, params: [SQLValue]) throws -> [Row];
     

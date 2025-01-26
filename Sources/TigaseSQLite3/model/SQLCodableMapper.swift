@@ -28,16 +28,15 @@ public class SQLCodableMapper {
         let keyPathToColumn: [AnyKeyPath:String];
     }
 
-    private static let lock = UnfairLock();
-    private static var mappings: [ObjectIdentifier: Mappings] = [:]
+    private static let mappings = UnfairLock(state: [ObjectIdentifier: Mappings]());
 
     public static func mappings<T: SQLCodable>(for type: T.Type) -> Mappings {
-        lock.with {
+        mappings.with { state in
             let id = ObjectIdentifier(type);
-            guard let mappings = self.mappings[id] else {
+            guard let mappings = state[id] else {
                 let keyPathToColumn = Dictionary.init(uniqueKeysWithValues: type.fields.map({ ($0.keyPath,$0.column) }))
                 let mappings = Mappings(keyPathToColumn: keyPathToColumn);
-                self.mappings[id] = mappings;
+                state[id] = mappings;
                 return mappings;
             }
             return mappings;

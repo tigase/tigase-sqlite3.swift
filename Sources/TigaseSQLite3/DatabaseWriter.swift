@@ -99,21 +99,24 @@ public struct Change: Sendable {
 
 class ChangesObserver {
     
-    private let lock = UnfairLock();
-    private var publishers: [String: PassthroughSubject<Change,Never>] = [:];
-    private var changes: [String: Change] = [:];
-    private var transactions: Set<UInt64> = [];
+    private final class State {
+        var publishers: [String: PassthroughSubject<Change,Never>] = [:];
+        var changes: [String: Change] = [:];
+        var transactions: Set<UInt64> = [];
+    }
+    
+    private let state = UnfairLock(state: State());
 
     func beginTransaction(_ transactionId: UInt64) {
-        lock.with({
-            transactions.insert(transactionId);
+        state.with({
+            $0.transactions.insert(transactionId);
         })
     }
     
     func endTransaction(_ transactionId: UInt64) {
-        let needFlush = lock.with({
-            transactions.remove(transactionId);
-            return transactions.isEmpty && !changes.isEmpty;
+        let needFlush = state.with({
+            $0.transactions.remove(transactionId);
+            return $0.transactions.isEmpty && !$0.changes.isEmpty;
         })
         if needFlush {
             flush();
@@ -121,11 +124,10 @@ class ChangesObserver {
     }
     
     func changePublisher(table: String) -> AnyPublisher<Change, Never> {
-        return lock.with({
-            guard let publisher = publishers[table] else {
-                print("creating publisher for", table)
+        return state.with({
+            guard let publisher = $0.publishers[table] else {
                 let publisher = PassthroughSubject<Change,Never>();
-                publishers[table] = publisher;
+                $0.publishers[table] = publisher;
                 return publisher;
             }
             return publisher;
@@ -133,16 +135,15 @@ class ChangesObserver {
     }
     
     func reportChange(table: String, rowId: Int64) {
-        print("reporting change:", table, rowId)
-        let needFlush = lock.with({
-            if let change = changes[table] {
+        let needFlush = state.with({
+            if let change = $0.changes[table] {
                 var rowsIds = change.rowIds;
                 rowsIds.insert(rowId);
-                changes[table] = Change(table: table, rowIds: rowsIds);
+                $0.changes[table] = Change(table: table, rowIds: rowsIds);
             } else {
-                changes[table] = Change(table: table, rowIds: [rowId]);
+                $0.changes[table] = Change(table: table, rowIds: [rowId]);
             }
-            return transactions.isEmpty;
+            return $0.transactions.isEmpty;
         });
         if needFlush {
             flush();
@@ -150,15 +151,13 @@ class ChangesObserver {
     }
  
     private func flush() {
-        lock.with({
-            print("flushing..")
-            for (table,change) in changes {
-                print("sending change", table, change, publishers[table])
-                if let publisher = publishers[table] {
+        state.with({
+            for (table,change) in $0.changes {
+                if let publisher = $0.publishers[table] {
                     publisher.send(change);
                 }
             }
-            changes.removeAll(keepingCapacity: false);
+            $0.changes.removeAll(keepingCapacity: false);
         })
     }
 }

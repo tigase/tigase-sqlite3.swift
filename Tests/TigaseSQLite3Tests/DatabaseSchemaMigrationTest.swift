@@ -72,7 +72,7 @@ class DatabaseSchemaMigrationTest: XCTestCase {
     
 }
 
-class DatabaseMigrator: DatabaseSchemaMigrator {
+final class DatabaseMigrator: DatabaseSchemaMigrator, @unchecked Sendable {
     
     let expectedVersion: Int = 2
     
@@ -86,7 +86,7 @@ class DatabaseMigrator: DatabaseSchemaMigrator {
 }
 
 
-class DatabaseMigrator2: DatabaseSchemaMigrator {
+final class DatabaseMigrator2: DatabaseSchemaMigrator {
     
     let expectedVersion: Int = 2
         

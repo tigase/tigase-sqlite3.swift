@@ -24,7 +24,7 @@ import Foundation
 import SwiftSyntax
 import SwiftSyntaxMacros
 import SwiftSyntaxBuilder
-import SwiftDiagnostics
+@preconcurrency import SwiftDiagnostics
 
 struct SimpleDiagnosticMessage: DiagnosticMessage, Error {
   let message: String

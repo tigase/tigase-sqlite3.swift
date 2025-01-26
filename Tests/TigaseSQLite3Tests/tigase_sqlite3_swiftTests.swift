@@ -31,7 +31,7 @@ final class tigase_sqlite3_swiftTests: XCTestCase {
 //        XCTAssertEqual(TigaseSQLite3Swift().text, "Hello, World!")
     }
 
-    static var allTests = [
-        ("testExample", testExample)
-    ]
+//    static let allTests = [
+//       ("testExample", testExample)
+//    ]
 }
