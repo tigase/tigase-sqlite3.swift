@@ -5,7 +5,7 @@ import CompilerPluginSupport
 import PackageDescription
 
 let package = Package(
-    name: "TigaseSQLite3",
+    name: "tigase-sqlite3.swift",
     platforms: [
         .iOS(.v14),
         .macOS(.v11)
