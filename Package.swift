@@ -5,7 +5,7 @@ import CompilerPluginSupport
 import PackageDescription
 
 let package = Package(
-    name: "tigase-sqlite3.swift",
+    name: "TigaseSQLite3",
     platforms: [
         .iOS(.v14),
         .macOS(.v11)
@@ -47,8 +47,7 @@ let package = Package(
         .target(
             name: "TigaseSQLite3",
             dependencies: [
-                .target(name: "CSQLite"),
-                .target(name: "TigaseSQLite3Macros")
+                .target(name: "CSQLite")
             ]
         ),
         .testTarget(
