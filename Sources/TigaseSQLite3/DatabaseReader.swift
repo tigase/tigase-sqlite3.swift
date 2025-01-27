@@ -48,14 +48,16 @@ extension DatabaseReader {
     }
     
     public func count(_ query: String, cached: Bool = true, params: [String: Encodable?]) throws -> Int {
-        guard let value = try select(query, cached: cached, params: params).first?["count"]?.int else {
+        let values = try select(query, cached: cached, params: params).first;
+        guard let value = values?["count"]?.int ?? values?.first?.value.int else {
             throw DBError.invalidResult;
         }
         return value;
     }
     
     public func count(_ query: String, cached: Bool = true, params: [Encodable?] = []) throws -> Int {
-        guard let value = try select(query, cached: cached, params: params).first?["count"]?.int else {
+        let values = try select(query, cached: cached, params: params).first;
+        guard let value = values?["count"]?.int ?? values?.first?.value.int else {
             throw DBError.invalidResult;
         }
         return value;
