@@ -23,19 +23,19 @@
 import Foundation
 import os
 
-open class UnfairLock<State>: @unchecked Sendable {
+class UnfairLock<State>: @unchecked Sendable {
     
     private let lockFn: () -> Void;
     private let unlockFn: () -> Void;
     private var state: State;
     
-    public init(state: State) {
+    init(state: State) {
         self.state = state;
         (lockFn, unlockFn) = createUnfairLock(initialState: state);
     }
     
     @discardableResult
-    public func with<R>(_ body: (inout State) -> R) -> R {
+    func with<R>(_ body: (inout State) -> R) -> R {
         lockFn();
         defer {
             unlockFn();
@@ -44,7 +44,7 @@ open class UnfairLock<State>: @unchecked Sendable {
     }
 
     @discardableResult
-    public func with<R>(_ body: (inout State) throws -> R) rethrows -> R {
+    func with<R>(_ body: (inout State) throws -> R) rethrows -> R {
         lockFn();
         defer {
             unlockFn();
@@ -56,20 +56,20 @@ open class UnfairLock<State>: @unchecked Sendable {
 
 extension UnfairLock where State == Void {
     
-    public convenience init() {
+    convenience init() {
         self.init(state: ())
     }
 
-    public func lock() {
+    func lock() {
         lockFn()
     }
     
-    public func unlock() {
+    func unlock() {
         unlockFn();
     }
     
     @discardableResult
-    public func with<T>(_ body: () -> T) -> T {
+    func with<T>(_ body: () -> T) -> T {
         lock();
         defer {
             unlock();
@@ -78,7 +78,7 @@ extension UnfairLock where State == Void {
     }
     
     @discardableResult
-    public func with<T>(_ body: () throws -> T) rethrows -> T {
+    func with<T>(_ body: () throws -> T) rethrows -> T {
         lock();
         defer {
             unlock();

@@ -21,7 +21,7 @@
 //
 
 import Foundation
-import TigaseSQLite3Macros
+//import TigaseSQLite3Macros
 
 @attached(extension)
 @attached(member, names: arbitrary)

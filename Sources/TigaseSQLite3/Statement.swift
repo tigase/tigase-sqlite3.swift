@@ -220,6 +220,10 @@ extension Row {
         return self[key]?.int;
     }
     
+    public func int32(for key: String) -> Int32? {
+        return self[key]?.int.map(Int32.init);
+    }
+    
     public func bool(for key: String) -> Bool? {
         return try? self[key]?.value();
     }

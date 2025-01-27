@@ -45,13 +45,17 @@ public enum SQLValue: CustomStringConvertible, Equatable, Sendable {
     case double(Double)
     case text(String)
     case blob(Data)
+    
+    public static func bool(_ v: Bool) -> SQLValue {
+        return .integer(v ? 1 : 0);
+    }
 
     public static func fromAny(_ value: Encodable?) throws -> SQLValue {
         guard let value else { return .null }
         
         switch value {
         case let v as Bool:
-            return .integer(v ? 1 : 0);
+            return .bool(v);
         case let v as Int:
             return .integer(v)
         case let v as Double:
@@ -78,7 +82,7 @@ public enum SQLValue: CustomStringConvertible, Equatable, Sendable {
         
         switch value {
         case let v as Bool:
-            return .integer(v ? 1 : 0);
+            return .bool(v)
         case let v as Int:
             return .integer(v)
         case let v as Double:
@@ -107,6 +111,8 @@ public enum SQLValue: CustomStringConvertible, Equatable, Sendable {
             return (value != 0 ? true : false) as? V;
         case is Int.Type:
             return self.int as? V;
+        case is Int32.Type:
+            return self.int.flatMap(Int32.init) as? V;
         case is Double.Type:
             return self.double as? V;
         case is String.Type:
