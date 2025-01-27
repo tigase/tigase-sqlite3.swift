@@ -14,7 +14,7 @@ let package = Package(
         // Products define the executables and libraries a package produces, and make them visible to other packages.
         .library(
             name: "TigaseSQLite3",
-            targets: ["TigaseSQLite3", "TigaseSQLite3Macros"]),
+            targets: ["TigaseSQLite3"]),
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -47,7 +47,8 @@ let package = Package(
         .target(
             name: "TigaseSQLite3",
             dependencies: [
-                .target(name: "CSQLite")
+                .target(name: "CSQLite"),
+                .target(name: "TigaseSQLite3Macros")
             ]
         ),
         .testTarget(
