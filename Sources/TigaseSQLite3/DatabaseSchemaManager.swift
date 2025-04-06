@@ -23,11 +23,10 @@ public class DatabaseSchemaManager {
     public func upgrade(database: DatabaseWriter, migrator: DatabaseSchemaMigrator) throws {
         var currentVersion = try schemaVersion(database: database);
         while currentVersion < migrator.expectedVersion {
-            // FIXME: NEED TO UNCOMMENT THAT!!
-//            try database.withTransaction({ database in
-//                try migrator.upgrade(database: database, newVersion: currentVersion + 1);
-//                try self.schemaVersion(database: database, newVersion: currentVersion + 1);
-//            })
+            try database.withTransaction({ database in
+                try migrator.upgrade(database: database, newVersion: currentVersion + 1);
+                try self.schemaVersion(database: database, newVersion: currentVersion + 1);
+            })
             currentVersion = try schemaVersion(database: database);
         }
     }
